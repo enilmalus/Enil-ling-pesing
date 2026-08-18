@@ -1,0 +1,11 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Python / 工具临时产物
+__pycache__/
+*.pyc
+*.pyo
+
+# 本地实战沉淀（自研笔记，如不想公开可取消下一行注释）
+# references/notes/
