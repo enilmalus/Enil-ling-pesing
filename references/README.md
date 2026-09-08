@@ -46,7 +46,12 @@ references/
     ├── multi-target-orchestration.md # 多子域/多站点并行编排（聚类→分治→交叉回归→矩阵报告）
     ├── qiyuesuo-cms-storage.md   # 契约锁/电子签平台+官网CMS链+对象存储+DLP交付（三轮实战沉淀）
     ├── methodology-standards-map.md # PTES/WSTG/NIST 800-115/OSSTMM/ATT&CK 对齐映射 + WSTG 12 类查漏表
-    └── llm-agent-pentest-research.md # LLM 渗透代理论文蒸馏（PentestGPT/EnIGMA/Cybench 等→操作纪律）
+    ├── llm-agent-pentest-research.md # LLM 渗透代理论文蒸馏（PentestGPT/EnIGMA/Cybench 等→操作纪律）
+    ├── ad-initial-access.md       # AD 域渗透·初始访问（博客 HTB writeup 系列沉淀：零凭据→域内立足）
+    ├── ad-post-compromise.md      # AD 域渗透·立足后（BloodHound/ACL/ADCS/LAPS/SeBackup/域内隧道）
+    ├── privesc-linux-windows.md   # Linux/Windows 本机提权检查（枚举层默认可做/利用层授权门控）
+    ├── field-ops-toolbox.md      # 实战工具箱（shell 稳定/传文件/反弹矩阵/爆破与凭据破解/嗅探）
+    └── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
 ```
 
 ## 每个 playbook 的统一结构

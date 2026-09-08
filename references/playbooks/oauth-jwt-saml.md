@@ -117,6 +117,8 @@ jwt_tool <token> -C -d wordlist.txt
 
 **纪律**：payload 形状必须对齐真实 token（先 `echo <token> | cut -d. -f2 | base64 -d` 解码，保留原 claim 名，只改身份/角色字段）；伪造成功后立即打 admin 端点，不要反复重放自己的 `/my-account`。
 
+**pfx/p12 客户端证书链**（发现 .pfx/.p12 文件时的认证面打法，来源：HTB-Search）：`pfx2john staff.pfx > staff.hash` → `john --wordlist=/usr/share/wordlists/rockyou.txt staff.hash`（实测破出密码）→ **导入 Firefox 证书库（设置→隐私与安全→证书→导入）访问 mTLS 保护站点**——要求客户端证书的隐藏站点是常规枚举看不见的攻击面；密码破解模式同 hashcat 官方 pkcs12。AD CS 侧的证书**申请**链（Certify ESC1→Rubeus asktgt）见 `references/notes/ad-post-compromise.md`。
+
 ### 4.3 SAML 签名绕过 / XML 包裹 `[本地 src-hunter 11-saml + Claude-BugHunter hunt-saml]`
 
 ```xml

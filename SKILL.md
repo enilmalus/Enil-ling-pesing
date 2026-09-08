@@ -71,8 +71,10 @@ user-invocable: true
 | 端口与服务       | `nmap -sV -sC`（先 `--min-rate 10000` ）、`masscan`                                                                |
 | Web 目录与文件   | `feroxbuster / gobuster / wfuzz / ffuf` / `dirsearch` + SecLists；关注 `.git`、`.svn`、`.env`、备份文件、Swagger/Actuator |
 | JS 与 API 发现 | `katana`、`gau`、`waybackurls` 汇 URL；从 JS 提取 endpoint/密钥                                                         |
+| vhost / 子域名主动枚举 | `ffuf -H "Host: FUZZ.<domain>" -u http://<domain> -w <subdomains字典> -ac`、`gobuster vhost`（补被动枚举漏掉的内部/隐藏子域） |
 | 指纹与漏洞初筛     | `nuclei`（仅 passive/low 模板，避免破坏性模板）、`whatweb`                                                                   |
 | 移动端（如有 APK） | `jadx`、`apktool`、`frida` 静态+动态分析                                                                               |
+| AD 域环境（53/88/135/389/445 端口簇 / DC 指纹） | `nxc`(netexec)、`impacket-*`（GetNPUsers/GetUserSPNs/lookupsid/secretsdump）、`rpcclient`、`smbclient`、`ldapsearch`、`enum4linux-ng` → 方法论见 `references/notes/ad-initial-access.md` |
 
 **速度纪律**：所有爆破/扫描控制速率；生产/共享环境只用低强度参数并提前告知用户。
 
@@ -127,6 +129,10 @@ user-invocable: true
 
 **命中契约锁/电子签、RuoYi CMS、对象存储（MinIO/FastDFS）或同 IP 多端口集群时**（qiyuesuo/qyswebapp/qysoss/qysopen、`/prod-api/`+captchaImage、"认证失败，无法访问系统资源"、`:19000` S3 XML）→ Read `references/notes/qiyuesuo-cms-storage.md`：多端口同源聚类判别、契约锁前端 RSA 私钥与加密协议还原清单、RuoYi 后台速查表、对象存储匿名权限三连测（列/写/删）、老中间件类存在性差分、DLP 加密文档交付流程。
 
+**目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync）、ADCS ESC1、SeBackup→ntds.dit、域内隧道、服务凭据离线解密。
+
+**靶场/CTF 二进制栈溢出题目时**（nc 直连二进制服务、需要本地分析可执行文件）→ Read `references/notes/binary-stack-overflow.md`：checksec 防护判定、offset 确定、ret2libc 全链。
+
 ---
 
 ## Phase 4 · 利用与后渗透（严格受限）
@@ -137,6 +143,8 @@ user-invocable: true
 
 - 拿到 shell → 立即确认权限、主机名、网段，**不做**凭据 dump 与横向，除非授权写明
 - 内网进一步测试 → 回到 Phase 0 补充 in-scope 确认
+- 提权路径评估 → 枚举层（只读检查）默认可做，如实报告「存在提权路径」；实际利用属「可提权」授权项，授权明确允许时按 `references/notes/privesc-linux-windows.md` 决策树执行，无授权止步于路径存在证明
+- shell 后实操（传文件/升级 shell/凭据爆破验证/快捕流量）→ `references/notes/field-ops-toolbox.md`（工具矩阵 + 速率纪律 + 授权门禁）
 
 ---
 

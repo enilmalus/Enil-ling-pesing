@@ -146,3 +146,15 @@ for path in /seeyon/ /general/login.php /defaultroot/login.jsp /login/Login.jsp 
   curl -s -o /dev/null -w "%{http_code} $path\n" http://target$path
 done
 ```
+
+## 6. 中间件配置隐患审计清单（配置错误视角，来源：中间件及其漏洞）
+
+> 本文件其余各节是「指纹+路径」；本节是**配置审计**——指纹确认中间件类型后，逐项核对这些已知高危配置。命中后走对应 playbook 证明。
+
+**IIS**：父路径 `..` 支持（目录穿越面）；ASP 上传目录执行权限；`.asp` 映射解析漏洞（分号/双后缀）；IIS短文件名枚举（`~1` 请求差分）。
+
+**Apache**：`Options +Indexes`（目录列表）；`AllowOverride All` + 可上传 `.htaccess`（`AddType application/x-httpd-php .jpg`）；`mod_cgi` + ScriptAlias 写权限；`server-status`/`server-info` 未授权。
+
+**Nginx**：`alias` 配置错误（`location /files { alias /home/; }` → `/files../` 穿越）；`autoindex on`；`$doc_root$fastcgi_script_name` 解析漏洞（`x.jpg/.php`）；CRLF 注入（`proxy_pass` 头未过滤）。
+
+**Tomcat**：`manager/html` 弱口令 + WAR 部署；`AJP`（8009）暴露（Ghostcat CVE-2020-1938）；示例应用/`docs` 未删；`web.xml` 明文凭据；`PUT` 方法开启。

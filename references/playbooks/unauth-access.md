@@ -36,6 +36,8 @@
 | FTP | 21 | `ftp IP` → `anonymous` | 匿名访问 |
 | Hadoop YARN | 8088 | `/cluster` | 提交 job → RCE |
 | MySQL | 3306 | `mysql -h IP -u root` | 弱口令 / 空口令 |
+| **SMB（AD 域）** | 445 | `smbclient -N -L //IP/`（空会话列表） | 共享枚举 → GPP cpassword → 密码喷射；匿名可读 SYSVOL 时见 `references/notes/ad-initial-access.md` §1.4 |
+| **LDAP（AD 域）** | 389 | `ldapsearch -x -H ldap://IP -b "" -s base "(objectclass=*)"` | rootDSE 域信息 → 匿名枚举用户（见 ad-initial-access.md §1.2） |
 
 ### 2.2 中间件 / 管理面 `[本地 src-hunter]`
 
@@ -110,6 +112,8 @@ for p in env heapdump mappings beans configprops trace logfile; do
 done
 ```
 
+**AD 侧匿名/空会话枚举**（来源：HTB-Sauna/Forest 等，完整链见 `references/notes/ad-initial-access.md` §1）：SMB 空会话 `smbclient -N -L //IP/` → RPC `rpcclient -U "" -N IP`（`enumdomusers`/`queryuser`）→ `GetNPUsers.py -dc-ip IP -no-pass 'domain/'` 预 AS-REP 烘焙用户（无凭据拿 TGT）——子代理曾因只在 GetNPUsers 前试过 0 个账号而漏报，**AS-REP roast 与枚举必须两步走**。
+
 ### 4.2 数据提取 / 进阶 `[本地 src-hunter]`
 
 ```bash
@@ -159,6 +163,7 @@ hydra -L users.txt -P pass.txt -t 4 -W 2 target http-post-form "/login:user=^USE
 ```
 
 > 纪律：hydra `-t 4 -W 2`；单目标 ≤50 次/小时、命中即停；不无脑撒所有字典——先指纹定位厂商，只跑该厂商凭据。
+> 哈希/密钥容器破解矩阵（hashcat 模式表、john 转换器三件套、cewl 定制字典、nth 识别）统一见 `references/notes/field-ops-toolbox.md` §4——本文件只保留 Web 登录爆破条目。
 
 ## 6. 证据要求
 

