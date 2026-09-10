@@ -43,9 +43,7 @@ references/
 │   └── default-credentials-cn.md
 ├── templates/
 │   ├── report-template.md         # Phase 5 报告模板（md 骨架，含 WSTG 覆盖声明 + 提交前验证门）
-│   ├── state-tracking.md           # 长任务状态外化模板（Phase 2 起落盘，每阶段收尾更新）
-│   ├── client-docx-report-template.md  # 客户标准 docx 交付格式（配套 md2clientdocx.py 生成工具）
-│   └── gen_stats_table.py         # 风险统计表生成脚本（报告用）
+│   └── state-tracking.md           # 长任务状态外化模板（Phase 2 起落盘，每阶段收尾更新）
 └── notes/                         # 实战方法论、研究蒸馏与自研绕过技巧（实战类均数据脱敏）
     ├── mftcc-vue-microfrontend.md # 微前端+微服务网关架构方法论（某保理平台两轮实战沉淀）
     ├── multi-target-orchestration.md # 多子域/多站点并行编排（聚类→分治→交叉回归→矩阵报告）

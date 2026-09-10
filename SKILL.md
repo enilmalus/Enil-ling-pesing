@@ -169,7 +169,7 @@ user-invocable: true
 5. 修复建议按根因优先排序了？
 6. 无证据观察已移入"附录·待验证项"，未混入漏洞详情？
 
-**MUST 输出结构**（模板见 `references/templates/report-template.md`，存在则 Read 后套用；用户要 docx 交付时，Read `references/templates/client-docx-report-template.md` 后用 `~/Work/Tools/md2clientdocx/md2clientdocx.py` 转换）：
+**MUST 输出结构**（模板见 `references/templates/report-template.md`，存在则 Read 后套用）：
 
 1. **执行摘要**：范围、方法、时间线、风险统计
 2. **漏洞详情**（每个 finding）：
