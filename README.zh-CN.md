@@ -9,7 +9,7 @@
 ## 功能
 
 - **阶段 checkpoint 工作流**：每阶段有 MUST 输出，未通过不得进入下一阶段
-- **24 类漏洞 playbook**：SQLi / XSS / SSRF / IDOR / RCE / 反序列化 / XXE / SSTI / 逻辑漏洞 / OAuth-JWT-SAML / GraphQL / 竞态 / 请求走私 / WAF 绕过 / API 测试 / 未授权访问 / 信息泄露 / 路径遍历 / CSRF-开放重定向 / CORS-Host 头 / NoSQL / LLM 提示注入 / 移动-IoT / 云
+- **28 类漏洞 playbook**：SQLi / XSS / SSRF / IDOR / RCE / 反序列化 / XXE / SSTI / 逻辑漏洞 / OAuth-JWT-SAML / GraphQL / 竞态 / 请求走私 / WAF 绕过 / API 测试 / 未授权访问 / 信息泄露 / 路径遍历 / CSRF-开放重定向 / CORS-Host 头 / NoSQL / LLM 提示注入 / 移动-IoT / 云 / CSV-Excel 公式注入 / WebSocket（CSWSH） / 原型污染 / LDAP-XPath 注入
 - **反幻觉硬约束**：payload 必须出自 references / 工具输出 / 联网核实来源，禁止凭记忆生成；无证据不下结论
 - **国产 SRC 字典**：致远 / 通达 / 泛微 / 用友 / 金蝶 / 蓝凌等 OA 指纹、默认凭据、高频参数
 
@@ -36,9 +36,10 @@ ln -s "$(pwd)/Enil-ling-pesing" ~/.claude/skills/enil-ling-pesing
 ```
 ├── SKILL.md               # 主流程：六阶段 + 路由表 + 硬约束
 └── references/
-    ├── playbooks/         # 24 类漏洞 playbook
+    ├── playbooks/         # 28 类漏洞 playbook
+    ├── notes/             # 实战方法论笔记（AD 域、提权、.NET 客户端逆向、工具箱、二进制）
     ├── dictionaries/      # 国产指纹 / 默认凭据 / 高频参数
-    └── templates/         # 报告模板
+    └── templates/         # 报告 / 状态外化模板
 ```
 
 ## 取材来源

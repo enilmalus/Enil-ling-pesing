@@ -9,7 +9,7 @@ A full-workflow Agent Skill for penetration testing, security research, and vuln
 ## Features
 
 - **Staged checkpoint workflow**: each phase has a MUST output; you cannot advance to the next phase without passing it
-- **24 vulnerability playbooks**: SQLi / XSS / SSRF / IDOR / RCE / deserialization / XXE / SSTI / business logic / OAuth-JWT-SAML / GraphQL / race conditions / request smuggling / WAF bypass / API testing / unauthorized access / information disclosure / path traversal / CSRF-open redirect / CORS-Host header / NoSQL / LLM prompt injection / mobile-IoT / cloud
+- **28 vulnerability playbooks**: SQLi / XSS / SSRF / IDOR / RCE / deserialization / XXE / SSTI / business logic / OAuth-JWT-SAML / GraphQL / race conditions / request smuggling / WAF bypass / API testing / unauthorized access / information disclosure / path traversal / CSRF-open redirect / CORS-Host header / NoSQL / LLM prompt injection / mobile-IoT / cloud / CSV-Excel formula injection / WebSocket (CSWSH) / prototype pollution / LDAP-XPath injection
 - **Anti-hallucination hard constraints**: payloads must come from references / tool output / verified online sources; never generate from memory; no conclusion without evidence
 - **China SRC dictionaries**: fingerprints for Seeyon / Tongda / Weaver / Yonyou / Kingdee / Landray and other OA, default credentials, high-frequency parameters
 
@@ -36,9 +36,10 @@ Triggers when any of the following matches:
 ```
 ├── SKILL.md               # Main workflow: phases + routing table + hard constraints
 └── references/
-    ├── playbooks/         # 24 vulnerability playbooks
+    ├── playbooks/         # 28 vulnerability playbooks
+    ├── notes/             # Field methodology notes (AD, privesc, .NET client RE, toolbox, binary pwn)
     ├── dictionaries/      # China fingerprints / default credentials / parameters
-    └── templates/         # Report template
+    └── templates/         # Report / state-tracking templates
 ```
 
 ## Sources
