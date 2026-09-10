@@ -2,7 +2,7 @@
 
 > 应用把「内部对象的引用」直接暴露给客户端，却不在服务端校验「当前用户是否有权碰这个对象/这个操作」。IDOR = 改 ID 读写**他人**资源（水平越权）；「任意 X」= 普通用户直接调管理员/审核/财务接口（垂直/功能级越权）。两类合起来是 SRC 出货率最高的漏洞族之一：IDOR 高危占比 62.3%，「任意账号」子类高危占比高达 86.4%（数据来源：本地 src-hunter WooYun 案例统计，非官方数据），几乎等价 RCE。
 
-**取材来源**：[MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill)（529 案例）、[elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)（26 份公开报告）、[SnailSploit/Claude-Red](https://github.com/SnailSploit/Claude-Red)；权威公开源 PortSwigger / OWASP API1:2023 (BOLA)。
+**取材来源**：[MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill)（529 案例）、[elementalsouls/Claude-BugHunter](https://github.com/elementalsouls/Claude-BugHunter)（26 份公开报告）、[SnailSploit/Claude-Red](https://github.com/SnailSploit/Claude-Red)；权威公开源 PortSwigger / OWASP API1:2023 (BOLA) / [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)（HTTP Parameter Pollution 章节）。
 
 ---
 
@@ -140,6 +140,17 @@ POST /api/register
 | 参数过滤/WAF | HPP `?id=own_id&id=victim_id`；嵌套 JSON `{"data":{"id":"VICTIM"}}`；参数名变体 `user_id`/`userId`/`uid`/`account` |
 | 路由大小写/规范化 | `GET /admin/profile` → `/ADMIN/profile`；路径穿越 `POST /users/delete/MY_ID/../VICTIM_ID` |
 | 数组包裹 | `{"id":19}` → `{"id":[19]}`；`{"id":111}` → `{"id":{"id":111}}` |
+
+**HPP 后端解析差速查**（`?par1=a&par1=b` 时各技术实际取值 `[PayloadsAllTheThings HTTP Parameter Pollution]`）：
+
+| 技术 | 解析结果 |
+|---|---|
+| PHP/Apache、PHP/Zeus、Python Django、Ruby on Rails | 取**最后**（b） |
+| JSP/Servlet/Tomcat、Python Flask、Perl CGI/Apache、IBM HTTP、Golang `Query().Get()` | 取**第一**（a） |
+| Node.js、ASP/ASP.NET/IIS | 取**全部**（a,b） |
+| Golang `Query()["param"]`、Python/Zope | 数组（['a','b']） |
+
+> 用法：WAF/鉴权层与业务层技术栈不一致时（如 Nginx+PHP 前后端、Java 网关 + PHP 后端），`?id=合法值&id=越权值` 让校验层看 a、业务层取 b。数组注入变体：`param[]=v1&param[]=v2`、`param[]=v1&param=v2`；编码变体：`param=value1%26other=value2`。
 
 ## 5. 工具用法
 

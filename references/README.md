@@ -7,13 +7,17 @@
 ```
 references/
 ├── README.md                      # 本文件
-├── playbooks/                     # 逐类漏洞 playbook（✅ 已建齐 24 个）
+├── playbooks/                     # 逐类漏洞 playbook（✅ 已建齐 28 个）
 │   ├── _template.md               # 作者模板（非路由目标，写新 playbook 时参考）
 │   ├── sqli.md                    # P0/P1 深挖
 │   ├── xss.md
 │   ├── ssrf.md
 │   ├── idor-authz.md
 │   ├── file-upload.md
+│   ├── csv-excel-injection.md     # CSV/Excel 公式注入（导出功能）[PayloadsAllTheThings]
+│   ├── websocket.md               # WebSocket 测试 + CSWSH [PayloadsAllTheThings]
+│   ├── prototype-pollution.md     # 原型污染 CSPP/SSPP/gadget [PayloadsAllTheThings]
+│   ├── ldap-xpath-injection.md    # LDAP/XPath 注入 [PayloadsAllTheThings]
 │   ├── ssti.md
 │   ├── rce-deserialization.md
 │   ├── xxe.md
@@ -40,7 +44,8 @@ references/
 ├── templates/
 │   ├── report-template.md         # Phase 5 报告模板（md 骨架，含 WSTG 覆盖声明 + 提交前验证门）
 │   ├── state-tracking.md           # 长任务状态外化模板（Phase 2 起落盘，每阶段收尾更新）
-│   └── client-docx-report-template.md  # 客户标准 docx 交付格式（配套 md2clientdocx.py 生成工具）
+│   ├── client-docx-report-template.md  # 客户标准 docx 交付格式（配套 md2clientdocx.py 生成工具）
+│   └── gen_stats_table.py         # 风险统计表生成脚本（报告用）
 └── notes/                         # 实战方法论、研究蒸馏与自研绕过技巧（实战类均数据脱敏）
     ├── mftcc-vue-microfrontend.md # 微前端+微服务网关架构方法论（某保理平台两轮实战沉淀）
     ├── multi-target-orchestration.md # 多子域/多站点并行编排（聚类→分治→交叉回归→矩阵报告）
