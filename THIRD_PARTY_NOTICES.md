@@ -21,9 +21,9 @@
 
 ## 权威 payload 库（playbook 中标注出处）
 
-| 项目 | 许可证 | 链接 |
-|---|---|---|
-| PayloadsAllTheThings | MIT | https://github.com/swisskyrepo/PayloadsAllTheThings |
-| SecLists | MIT | https://github.com/danielmiessler/SecLists |
+| 项目 | 许可证 | 版权 | 链接 |
+|---|---|---|---|
+| PayloadsAllTheThings | MIT | © 2019 Swissky | https://github.com/swisskyrepo/PayloadsAllTheThings |
+| SecLists | MIT | © 2018 Daniel Miessler | https://github.com/danielmiessler/SecLists |
 
 > 说明：PortSwigger Web Security Academy 与 HackTricks 为公开知识库，playbook 中以文字引用其方法论与 payload，非代码复制。

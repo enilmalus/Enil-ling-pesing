@@ -34,7 +34,7 @@
 
 ### 4.1 基础探针
 
-公式可由 `=` `+` `–` `@` 任一开头 `[PayloadsAllTheThings]`。
+公式可由 `=` `+` `-` `@` 任一开头 `[PayloadsAllTheThings]`。
 
 ### 4.2 DDE 命令执行 `[PayloadsAllTheThings，逐字摘录]`
 
