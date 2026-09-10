@@ -1,7 +1,7 @@
 # AD 域渗透·初始访问方法论（零凭据起步到域内立足）
 
 > 来源：用户博客 20+ 篇 HTB AD writeup 系列沉淀（Active/Forest/Sauna/Monteverde/Support/Timelapse/Blackfield/Intelligence/Rebound/Search/StreamIO/APT/Mantis 等）。触发场景：目标暴露 AD 特征端口簇（53/88/135/389/445/464/3268）、获得疑似域凭据、或 Web 立足后发现域环境。
-> **仅限授权测试**：命令逐字摘自 writeup 原文（逐条标注来源）；真实项目执行前过 §8 红线与 SKILL.md Phase 0。
+> **仅限授权测试**：命令逐字摘自 writeup 原文（逐条标注来源）；真实项目执行前过 §9 红线与 SKILL.md Phase 0。
 
 ---
 
@@ -321,7 +321,30 @@ WARNING: Failed to get Kerberos TGT. Falling back to NTLM authentication. Error:
 
 **决策点**：任何票据被拒（KRB_AP_ERR_SKEW）/NTLM 异常/kerbrute 报 Clock skew，第一动作是与 DC 对时，不要先怀疑凭据错误。
 
-## 8. 红线对齐段（必读）
+## 8. Kerberos-only 环境（NTLM 全禁）
+
+**判别信号**：共享 PDF / 内部公告写明「NTLM 全网禁用、仅允许 Kerberos」（来源：HTB-Scrambled，Public 共享 `Network Security Changes.pdf`）。
+
+**影响**：所有 impacket / nxc 工具必须带 `-k -no-pass` 且用**主机名**（非 IP，Kerberos 票据绑定 SPN）；NTLM relay、Responder 捕获、多播协议滥用路线**全部封死**——环境判明后不要在这些路径上耗时间，直接转 Kerberos 攻击面（Kerberoasting / 银票 / AS-REP）。
+
+**krb5.conf 手工配置**（攻击机 DNS 不解析域内主机时；来源：HTB-Scrambled）：
+
+```ini
+[libdefaults]
+    default_realm = SCRM.LOCAL
+    dns_lookup_realm = false
+    dns_lookup_kdc = false
+    rdns = false
+[realms]
+    SCRM.LOCAL = { kdc = DC1.scrm.local; admin_server = DC1.scrm.local }
+[domain_realm]
+    .scrm.local = SCRM.LOCAL
+    scrm.local = SCRM.LOCAL
+```
+
+**WinRM 也走 Kerberos**：`evil-winrm -i DC1.scrm.local -r scrm.local -u <user> -p <pass>`（`-r` 指定 realm，替代 NTLM 默认路径）。
+
+## 9. 红线对齐段（必读）
 
 1. **仅限授权测试**：喷洒、钓鱼投递、凭据爆破均直接作用于真实用户账号——只允许在书面授权范围内执行；HTB 是靶机场景，真实项目逐条核对授权后再动。
 2. **触发 skill Phase 0 授权流程**：用户首次给出目标即进入 Phase 0；如有限定测试范围须先说出，未说出默认授权范围。域内进一步测试回 Phase 0 补充 in-scope 确认。

@@ -118,6 +118,8 @@ user-invocable: true
 | CORS 响应头 / Host 头注入 / 缓存投毒 | `references/playbooks/cors-host-header.md` |
 | MongoDB / NoSQL 后端（JSON 运算符） | `references/playbooks/nosql.md` |
 | LLM/AI agent / prompt 入口 / RAG | `references/playbooks/llm-prompt-injection.md` |
+| 非标 TCP 端口返回 banner / `ERROR_UNKNOWN_COMMAND` 类私有协议 | `references/notes/dotnet-client-re.md`（客户端逆向定位后门与序列化格式） |
+| Windows .NET 客户端 exe/dll（内网工具、随共享分发） | `references/notes/dotnet-client-re.md` |
 
 **工具与自动化**：手工确认后可用 `sqlmap`、`nuclei`、`ffuf` 扩大覆盖面；任何自动工具输出仍需手工复核证据。
 
@@ -129,7 +131,7 @@ user-invocable: true
 
 **命中契约锁/电子签、RuoYi CMS、对象存储（MinIO/FastDFS）或同 IP 多端口集群时**（qiyuesuo/qyswebapp/qysoss/qysopen、`/prod-api/`+captchaImage、"认证失败，无法访问系统资源"、`:19000` S3 XML）→ Read `references/notes/qiyuesuo-cms-storage.md`：多端口同源聚类判别、契约锁前端 RSA 私钥与加密协议还原清单、RuoYi 后台速查表、对象存储匿名权限三连测（列/写/删）、老中间件类存在性差分、DLP 加密文档交付流程。
 
-**目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync）、ADCS ESC1、SeBackup→ntds.dit、域内隧道、服务凭据离线解密。
+**目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理、Kerberos-only（NTLM 全禁）环境适配。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync）、ADCS ESC1、SeBackup→ntds.dit、域内隧道、服务凭据离线解密。
 
 **靶场/CTF 二进制栈溢出题目时**（nc 直连二进制服务、需要本地分析可执行文件）→ Read `references/notes/binary-stack-overflow.md`：checksec 防护判定、offset 确定、ret2libc 全链。
 
