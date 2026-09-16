@@ -1,6 +1,6 @@
 # EmpireCMS（帝国 CMS）单域渗透方法论（2026-09 实战沉淀）
 
-> 来源：某新闻媒体集团 CMS 后台主机的授权渗透（EmpireCMS 7.5 深度定制版，五轮测试，中5低5信息1）。本文件是**方法论提炼**，目标标识、账号、内网地址已脱敏。命中 EmpireCMS（`/e/` 目录结构、`ecmsadmin.php`、`e/enews/` 报错文案「您的用户名、密码或安全答案有误」等指纹）时按 §1-§7 过一遍。
+> 来源：某新闻媒体集团 CMS 后台主机的授权渗透（EmpireCMS 7.5 深度定制版，五轮测试，中5低5信息1）。本文件是**方法论提炼**，目标标识、账号、内网地址已脱敏。命中 EmpireCMS（`/e/` 目录结构、`e/admin/ecmsadmin.php`、后台登录失败文案「您的用户名、密码或安全答案有误」（源码锚点 `e/class/adminfun.php` 的 `LoginFail`，前台会员登录是另一条文案「您的用户名或密码有误!」）等指纹）时按 §1-§7 过一遍。
 
 **核心思路**：EmpireCMS 是**开源可下载**的国产 CMS——先下 stock 源码做白盒对照，把黑盒行为与源码逐点比对，能快速区分「stock 就有的面」与「定制新增/删除的面」。大量负向结论可以**用源码审计一次排除**，省掉多轮发包实测；省下的时间花在定制改动的差异点上。
 
@@ -54,13 +54,13 @@ EmpireCMS 的 auth cookie 是**确定性 md5 拼接**（非 HMAC），输入全�
 
 ## 4. 帝国 CMS 高命中面清单（实测漏洞集中地）
 
-1. **后台登录**：验证码字段在模板中常被移除（`ShowKey.php` 基础设施还在但表单不引用）+ 无锁定无频控 → 可无限速在线爆破（最坏 CVSS 7.4）。检查顺序：无验证码 POST 到达凭据校验 → 连续 5 次失败看响应是否一致 → 默认凭据 `admin/admin` 单次
+1. **后台登录**：stock 默认即无验证码（`adminloginkey=1`，后台设置 0=开启/1=关闭；登录表单 `if(empty($adminloginkey))` 才渲染验证码行、服务端 `if(!$adminloginkey)` 才校验，`ShowKey.php` 基础设施还在但两端均不启用）+ 锁定机制存在但双层可绕（`CheckLoginNum()`：cookie 层 `loginnum`/`lastlogintime` 清 cookie 即绕；DB 层 `enewsloginfail` 表按 `egetip()` 记 IP，默认 `getiptype=0` 信任 `X-Forwarded-For` → 伪造 XFF 换 IP 即绕；stock 阈值 5 次/60 分钟）→ 默认部署实践可无限速在线爆破（最坏 CVSS 3.1 `AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N` = 7.5）。检查顺序：无验证码 POST 到达凭据校验 → 保持 cookie 与 IP 连续 6 次失败看第 6 次响应：仍与前面一致 = 锁定未生效；返回「系统限制的登录次数不得超过 5 次」= 锁定生效，再测伪造 `X-Forwarded-For` 换 IP 能否绕 DB 层 → 默认凭据 `admin/admin` 单次
 2. **会员注册**：无验证码无邮箱激活 → 批量注册；**无保留用户名黑名单** → 可注册 `admin` 会员名仿冒官方发站内信（与后台管理员表分离，非接管，低危）；**注册接口报错差分** → 用户名/邮箱枚举（登录接口无此问题，只有注册接口有）
 3. **开放重定向双向量**（详见 playbooks/csrf-open-redirect.md §2b）：
    - `EcmsGetReturnUrl()` 把 **HTTP Referer 原样写入 returnurl cookie**（仅过滤 XSS 字符、无域名校验），登录成功页 `location.href` 执行 → 攻击者诱导受害者从恶意页访问任意会员保护页即完成植入
    - `DoingReturnUrl()`（stock connect.php:898）各写入动作成功后跳转取 **POST 参数 `ecmsfrom`**，`RepPostStrUrl()`（connect.php:1101）经查无域名校验（仅 XSS 字符过滤），跨站自动提交表单触发
    - 修复锚点：stock `connect.php` 的 `EcmsGetReturnUrl` / `DoingReturnUrl` / `RepPostStrUrl` 三处
-4. **留言板 gbook**：版面配置 `checked` 字段直接决定入库存展示值（默认配置 0=无需审核立即公开）+ `gbkey_ok=0`（无验证码）+ 频控仅客户端 cookie（`lastgbooktime`，可清） → 匿名在官方域名下即时发布任意文本（入库转义正确、XSS 排除，但钓鱼话术/仿冒公告不受限）。**测试时注意：提交即公开展示，无法自删，只发一条最小探针**
+4. **留言板 gbook**（stock 默认关闭该模块：安装 SQL `closemods=',error,gb,fb,'`，开着即为部署显式/定制开启）：版面配置 `checked` 字段直接决定入库存展示值（默认 0=无需审核立即公开）+ `gbkey_ok=0`（无验证码）+ 频控仅客户端 cookie（`lastgbooktime`，可清） → 匿名在官方域名下即时发布任意文本（入库转义正确、XSS 排除，但钓鱼话术/仿冒公告不受限）。**测试时注意：提交即公开展示，无法自删，只发一条最小探针**
 5. **后台目录静态文件**：定制部署常把操作文档（docx/pdf）放在 `/e/admin/` 下无认证可下载——登录页内嵌链接即入口，内容含内部联系人姓名手机号（社工素材）。扫后台目录时**非 PHP 扩展名单单独过一遍**
 6. **会话 cookie 属性**：stock `$ecms_config['cks']['ckhttponly']` 默认 0——有 secure 无 HttpOnly 是常见配置残留（一行修复）
 
@@ -74,7 +74,7 @@ EmpireCMS 模块开关是**系统级配置**（`eCheckCloseMods()`），关了�
 | 支付 payapi/点卡 | 流程未配置 | 关 → 业务逻辑 N/A |
 | 会员 memberconnect 第三方绑定 | 极短响应体 | 关 → OAuth 面 N/A |
 | 评论 pl | — | 开 → **服务端强制验证码**是 stock 强项，确认即可 |
-| 留言板 gbook | — | 开 → §4.4 |
+| 留言板 gbook | stock 默认关（安装 SQL closemods 含 gb/fb） | 开 → §4.4 |
 | RSS e/web | 只读 | 无参数面 |
 | e/DownSys、ShopSys、NewsSys | 常被 nginx 403 | 拦截面本身记资产清单 |
 
