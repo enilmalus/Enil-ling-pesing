@@ -46,6 +46,7 @@ references/
 │   └── state-tracking.md           # 长任务状态外化模板（Phase 2 起落盘，每阶段收尾更新）
 └── notes/                         # 实战方法论、研究蒸馏与自研绕过技巧（实战类均数据脱敏）
     ├── mftcc-vue-microfrontend.md # 微前端+微服务网关架构方法论（某保理平台两轮实战沉淀）
+    ├── empirecms-cms.md          # 帝国 EmpireCMS 方法论（stock 源码白盒对照/cookie 伪造链/负向锚点/痕迹纪律）
     ├── multi-target-orchestration.md # 多子域/多站点并行编排（聚类→分治→交叉回归→矩阵报告）
     ├── qiyuesuo-cms-storage.md   # 契约锁/电子签平台+官网CMS链+对象存储+DLP交付（三轮实战沉淀）
     ├── methodology-standards-map.md # PTES/WSTG/NIST 800-115/OSSTMM/ATT&CK 对齐映射 + WSTG 12 类查漏表

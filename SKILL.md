@@ -135,6 +135,8 @@ user-invocable: true
 
 **命中契约锁/电子签、RuoYi CMS、对象存储（MinIO/FastDFS）或同 IP 多端口集群时**（qiyuesuo/qyswebapp/qysoss/qysopen、`/prod-api/`+captchaImage、"认证失败，无法访问系统资源"、`:19000` S3 XML）→ Read `references/notes/qiyuesuo-cms-storage.md`：多端口同源聚类判别、契约锁前端 RSA 私钥与加密协议还原清单、RuoYi 后台速查表、对象存储匿名权限三连测（列/写/删）、老中间件类存在性差分、DLP 加密文档交付流程。
 
+**命中帝国 EmpireCMS 时**（`/e/` 目录结构、`ecmsadmin.php`、`e/enews/index.php` 报错文案、cookie 前缀 + `auth` 后缀命名）→ Read `references/notes/empirecms-cms.md`：开源 stock 源码白盒对照法（负向结论源码一次排除）、默认密钥 cookie 离线重算伪造链、stock 负向审计锚点表（RepPostVar2/int 强转/ENT_QUOTES 转义，勿重复实测）、高命中面清单（登录爆破/注册仿冒/Referer 植入与 ecmsfrom 双向量重定向/无审核留言板/后台目录静态文件）、功能模块开关矩阵、全功能点核对自检法、内容型写入测试痕迹纪律。
+
 **目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理、Kerberos-only（NTLM 全禁）环境适配。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync）、ADCS ESC1、SeBackup→ntds.dit、域内隧道、服务凭据离线解密。
 
 **靶场/CTF 二进制栈溢出题目时**（nc 直连二进制服务、需要本地分析可执行文件）→ Read `references/notes/binary-stack-overflow.md`：checksec 防护判定、offset 确定、ret2libc 全链。
@@ -168,6 +170,9 @@ user-invocable: true
 4. 影响分析含业务影响 + 攻击者最坏结果？
 5. 修复建议按根因优先排序了？
 6. 无证据观察已移入"附录·待验证项"，未混入漏洞详情？
+7. 测试痕迹清单齐吗（每个写入点一条：内容标记、可见性等级、能否自删）？
+
+**测试痕迹清单（第 7 条展开）**：报告附录 MUST 含「测试痕迹与账号」，按清理优先级排序——公开可见痕迹（优先，提交即展示无法自删的内容，如无审核留言）> 后台可见（错误报告/待审内容）> 仅数据库入库 > 注册的测试账号与站内信。逐条列唯一内容标记（`probe-<日期>` 式）与建议动作；测试账号密码交甲方不留明文报告；注明登录尝试次数与默认凭据测试次数（自证未做爆破）。写入型探针（文件/内容）测试前先判可见性等级，公开面只发一条最小探针（详见 `references/notes/empirecms-cms.md` §7）。
 
 **MUST 输出结构**（模板见 `references/templates/report-template.md`，存在则 Read 后套用）：
 

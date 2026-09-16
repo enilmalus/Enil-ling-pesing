@@ -32,14 +32,26 @@
 
 **点击劫持检查点**（[本地 src-hunter]）：任何「删除 / 授权 / 加角色」按钮所在的页面。
 
+**2b. 非 URL 参数型重定向向量**（跳转目标不在地址栏里，经典参数扫描抓不到）`[本地实战沉淀，EmpireCMS 案例]`：
+
+| 向量类型 | 机制 | 发现手法 |
+|---|---|---|
+| **Referer 植入 Cookie** | 应用把 HTTP Referer 原样写入 `returnurl` 类 cookie（仅过滤 XSS 字符、无域名校验），后续跳转页 `location.href='<cookie>'` 执行 | 带攻击者 Referer 访问任意受保护页，看 `Set-Cookie: xxxreturnurl=<Referer 值>` 回显；再走一次正常登录/操作触发跳转 |
+| **POST 参数型** | 写入动作（发留言/评论/反馈）成功后的跳转目标取 POST body 参数（如 EmpireCMS 的 `ecmsfrom` → `DoingReturnUrl()`），无域名校验 | 抓表单隐藏字段找形似来源/回跳的 input；跨站自动提交表单即可触发（代价：附带提交一条内容） |
+| **服务端 Session/DB 存储** | 「下一步」「继续操作」类跳转目标存在服务端会话或数据库 | 找设置该目标的入口请求（往往在前一步流程） |
+| **Cookie 直读** | JS 直接 `location.href = getCookie('redirect')` | 读前端 JS 找 cookie 读取跳转 |
+
+> 排查顺序：grep 前端 JS `location.href` 赋值来源 → 追每个来源（URL 参数 / cookie / POST 字段 / 服务端模板变量）→ 逐个向量构造完整「植入 + 触发」两步链验证。**只证明植入或只证明触发都不算闭环**，两步在同一会话连起来才计「已确认」。
+
 ## 3. 探测顺序（从最无害 → 最有杀伤力）
 
 1. **开放重定向基础**：`?url=https://evil.com`，看 `Location:` 是否原样回显（`curl -I --max-redirs 0`）。
-2. **开放重定向 bypass**：按第 4.3 矩阵逐条试，直到定位绕过校验的正则缺陷。
-3. **开放重定向 → OAuth 链**：把目标域上的开放重定向填进 `redirect_uri`，看授权码是否被发到 evil.com（升 ATO）。
-4. **CSRF 令牌缺失/可预测**：抓改密请求，删 token 参数/置空/复用旧 token，看是否仍 200。
-5. **CSRF SameSite 绕过**：`SameSite=Lax` 时改走 GET/顶级导航；`SameSite=None` 缺 `Secure` 时直接跨站。
-6. **点击劫持**：`curl -sI` 查安全头，缺失则做透明 iframe PoC（截图证明）。
+2. **非 URL 参数型向量**：按 §2b 过一遍（JS 跳转来源 → cookie / POST 字段 / 服务端存储），构造「植入 + 触发」两步链。
+3. **开放重定向 bypass**：按第 4.3 矩阵逐条试，直到定位绕过校验的正则缺陷。
+4. **开放重定向 → OAuth 链**：把目标域上的开放重定向填进 `redirect_uri`，看授权码是否被发到 evil.com（升 ATO）。
+5. **CSRF 令牌缺失/可预测**：抓改密请求，删 token 参数/置空/复用旧 token，看是否仍 200。
+6. **CSRF SameSite 绕过**：`SameSite=Lax` 时改走 GET/顶级导航；`SameSite=None` 缺 `Secure` 时直接跨站。
+7. **点击劫持**：`curl -sI` 查安全头，缺失则做透明 iframe PoC（截图证明）。
 
 ## 4. Payload 区（每条标注出处）
 
@@ -185,7 +197,7 @@ done
 
 ## 6. 证据要求
 
-- **开放重定向「已确认」**：`curl -sI --max-redirs 0` 的 `Location:` 头指向你控制的域（evil.com / Collaborator）；保存完整请求 + `Location` 回显截图。
+- **开放重定向「已确认」**：`curl -sI --max-redirs 0` 的 `Location:` 头指向你控制的域（evil.com / Collaborator）；保存完整请求 + `Location` 回显截图。非 URL 参数型（§2b）按两步链取证：植入步的 `Set-Cookie` / 参数回显 + 触发步的响应体 `location.href='<攻击者域>'`，同一 cookie 会话内连起来。
 - **开放重定向升 ATO**：必须证明授权码被发到攻击者域——用 Burp Collaborator 作注入域，捕获带 `code=` 的回调。
 - **CSRF「已确认」**：删 token / 置空 / 复用后，目标状态真实改变（截图前后差异：改邮箱前/后、改密成功提示）；PoC 是能在受害者浏览器自动提交的 HTML，且用无痕窗口复现 2 次。
 - **点击劫持「已确认」**：浏览器中诱饵页叠加透明 iframe 的截图 + 点击诱饵按钮实际触发目标敏感操作的证据（操作日志 / 状态变化）。
