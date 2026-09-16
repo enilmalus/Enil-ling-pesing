@@ -19,14 +19,21 @@
 
 ## 2. cookie 伪造链测试（EmpireCMS 专属高危面）
 
-EmpireCMS 会员/后台 auth cookie 是 **可离线重算** 的（非 HMAC，服务端按公式拼接用户名+密码密文+rnd+时间戳+**全局密钥**做 md5 类运算）。默认部署的密钥（`ckrndtwo` 等）公开可查：
+EmpireCMS 的 auth cookie 是**确定性 md5 拼接**（非 HMAC），输入全部是可预测字段 + install 时填入 config.php 的**全局密钥**——密钥若为已知值，cookie 可离线重算。stock 有三层 cookie 验证（源码锚点 `e/class/functions.php` 的 `DoECookieRnd`/`DoECreateOtherRnd`、`e/member/class/user.php` 的 `qGetLoginAuthstr`）：
 
-1. 注册一个会员拿真实 cookie（合法凭据侧）
-2. 按 stock 源码的 cookie 算法，用**默认密钥**离线重算 auth 值
-3. 重算值 ≠ 实际值 → **密钥已改**，整条伪造链（改 userid 冒充管理员会员、伪造后台会话）一次排除
-4. 若相等 → 直接升严重（会员越权/后台接管），进利用流程
+| cookie | 密钥（`$ecms_config`） | 拼接输入 |
+|---|---|---|
+| `mlauth`（会员） | `cks[ckrndtwo]` | rnd + 硬编码盐串 + userid + username + groupid |
+| `loginecmsckpass`（登录） | `esafe[ecookiernd]` | rnd + IP + UA + userid + username + dbdata + groupid + adminstyle + sessval |
+| `otherrndpass`（后台附加层） | `cks[ckrndtwo]` | 前者类输入 + 时间戳 + 每次轮换的随机 otherrndtwo |
 
-配套检查：cookie 名前缀是否 stock 默认（`ecms` 之类）——改过前缀说明做过安全定制，其他定制点概率也高。
+**测试方法**：
+1. 注册会员拿真实 auth cookie（合法凭据侧）
+2. 按源码公式、用候选密钥（stock 安装器占位符、网上流传的常见部署值）离线重算
+3. 重算 ≠ 实际值 → **密钥已改**，整条 cookie 伪造面一次排除
+4. 相等 → 密钥泄露确认，但注意会员伪造他人 cookie 还需其 DB 内 rnd（每次登录轮换）——继续评估会话固定/rnd 猜测等链路，按证据定级，不直接断言「任意用户接管」
+
+注意两个密钥**独立**（`ckrndtwo` / `ecookiernd`），都要过；密钥在 install 时强制填写，定制部署大概率已改，但历史/偷懒部署复用已知值的情况常见，值得单次验证。配套检查：cookie 名前缀是否 stock 默认（前台 `cks[ckvarpre]` / 后台 `cks[ckadminvarpre]`，install 时填写）——改过前缀说明做过安全定制，其他定制点概率也高。
 
 ## 3. stock 负向审计锚点（命中即记「源码确认排除」，勿重复实测）
 
@@ -35,7 +42,7 @@ EmpireCMS 会员/后台 auth cookie 是 **可离线重算** 的（非 HMAC，服
 | 搜索 keyword 注入 | `RepPostVar2` 剥离 `' " % -- ;` | 排除 |
 | 搜索字段名（show）注入 | 模型 searchvar 列表白名单 | 排除 |
 | wap/tags/投票模块参数 | `(int)` 强转 | 排除 |
-| 消息/留言/反馈字段存储 XSS | `ehtmlspecialchars(ENT_QUOTES)` 入库转义 | 排除 |
+| 消息/留言/反馈字段存储 XSS | 入库侧 `dgdb_tosave()`→`RepPostStr()` 无条件 `ehtmlspecialchars(ENT_QUOTES)`（展示侧 `tool/gbook/` 反而是裸 echo）——防护全压在入库单向转义 | 排除；**反查点：找绕过 `dgdb_tosave` 的 insert 路径，漏调一处即存储 XSS** |
 | 消息 IDOR | 收件人归属校验 | 排除 |
 | 登录报错用户枚举 | 前台/后台登录报错文案统一 | 排除（**注意注册接口是差分的，见 §4**） |
 | 改密码 | 强制旧密码校验 | 排除 |
@@ -51,9 +58,9 @@ EmpireCMS 会员/后台 auth cookie 是 **可离线重算** 的（非 HMAC，服
 2. **会员注册**：无验证码无邮箱激活 → 批量注册；**无保留用户名黑名单** → 可注册 `admin` 会员名仿冒官方发站内信（与后台管理员表分离，非接管，低危）；**注册接口报错差分** → 用户名/邮箱枚举（登录接口无此问题，只有注册接口有）
 3. **开放重定向双向量**（详见 playbooks/csrf-open-redirect.md §2b）：
    - `EcmsGetReturnUrl()` 把 **HTTP Referer 原样写入 returnurl cookie**（仅过滤 XSS 字符、无域名校验），登录成功页 `location.href` 执行 → 攻击者诱导受害者从恶意页访问任意会员保护页即完成植入
-   - `/e/enews/index.php` 各写入动作成功后跳转取 **POST 参数 `ecmsfrom`**（`DoingReturnUrl()` 同样无域名校验），跨站自动提交表单触发
+   - `DoingReturnUrl()`（stock connect.php:898）各写入动作成功后跳转取 **POST 参数 `ecmsfrom`**，`RepPostStrUrl()`（connect.php:1101）经查无域名校验（仅 XSS 字符过滤），跨站自动提交表单触发
    - 修复锚点：stock `connect.php` 的 `EcmsGetReturnUrl` / `DoingReturnUrl` / `RepPostStrUrl` 三处
-4. **留言板 gbook**：配置默认 `checked=0`（无需审核立即公开）+ `gbkey_ok=0`（无验证码）+ 频控仅客户端 cookie（可清） → 匿名在官方域名下即时发布任意文本（转义正确、XSS 排除，但钓鱼话术/仿冒公告不受限）。**测试时注意：提交即公开展示，无法自删，只发一条最小探针**
+4. **留言板 gbook**：版面配置 `checked` 字段直接决定入库存展示值（默认配置 0=无需审核立即公开）+ `gbkey_ok=0`（无验证码）+ 频控仅客户端 cookie（`lastgbooktime`，可清） → 匿名在官方域名下即时发布任意文本（入库转义正确、XSS 排除，但钓鱼话术/仿冒公告不受限）。**测试时注意：提交即公开展示，无法自删，只发一条最小探针**
 5. **后台目录静态文件**：定制部署常把操作文档（docx/pdf）放在 `/e/admin/` 下无认证可下载——登录页内嵌链接即入口，内容含内部联系人姓名手机号（社工素材）。扫后台目录时**非 PHP 扩展名单单独过一遍**
 6. **会话 cookie 属性**：stock `$ecms_config['cks']['ckhttponly']` 默认 0——有 secure 无 HttpOnly 是常见配置残留（一行修复）
 
