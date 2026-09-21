@@ -137,7 +137,7 @@ user-invocable: true
 
 **命中帝国 EmpireCMS 时**（`/e/` 目录结构、`e/admin/ecmsadmin.php`、后台登录失败文案「您的用户名、密码或安全答案有误」、cookie 前缀 + `auth` 后缀命名）→ Read `references/notes/empirecms-cms.md`：开源 stock 源码白盒对照法（负向结论源码一次排除）、全局密钥 cookie 离线重算验证（ckrndtwo/ecookiernd 双密钥、伪造链排除/升级判定）、stock 负向审计锚点表（RepPostVar2/int 强转/ENT_QUOTES 转义，勿重复实测）、高命中面清单（登录爆破/注册仿冒/Referer 植入与 ecmsfrom 双向量重定向/无审核留言板/后台目录静态文件）、功能模块开关矩阵、全功能点核对自检法、内容型写入测试痕迹纪律。
 
-**目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理、Kerberos-only（NTLM 全禁）环境适配。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync）、ADCS ESC1、SeBackup→ntds.dit、域内隧道、服务凭据离线解密。
+**目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理、Kerberos-only（NTLM 全禁）环境适配。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：**Kerberos-only 通用纪律（PAC 时序/状态还原/BH 边过期/工具实名/NTLM 报错三态）**、BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync/**owneredit→dacledit→bloodyAD 接管链**）、**Shadow Credentials（msDS-KeyCredentialLink，免爆破拿身份+NT hash）**、ADCS ESC1、SeBackup→ntds.dit、**KrbRelay（LDAP 中继机器账户入 Administrators，含跨会话抓 NTLM 与从源码自建配方）**、域内隧道、服务凭据离线解密。
 
 **靶场/CTF 二进制栈溢出题目时**（nc 直连二进制服务、需要本地分析可执行文件）→ Read `references/notes/binary-stack-overflow.md`：checksec 防护判定、offset 确定、ret2libc 全链。
 

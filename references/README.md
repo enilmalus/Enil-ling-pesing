@@ -52,10 +52,10 @@ references/
     ├── methodology-standards-map.md # PTES/WSTG/NIST 800-115/OSSTMM/ATT&CK 对齐映射 + WSTG 12 类查漏表
     ├── llm-agent-pentest-research.md # LLM 渗透代理论文蒸馏（PentestGPT/EnIGMA/Cybench 等→操作纪律）
     ├── ad-initial-access.md       # AD 域渗透·初始访问（博客 HTB writeup 系列沉淀：零凭据→域内立足）
-    ├── ad-post-compromise.md      # AD 域渗透·立足后（BloodHound/ACL/ADCS/LAPS/SeBackup/域内隧道）
+    ├── ad-post-compromise.md      # AD 域渗透·立足后（Kerberos-only 纪律/BloodHound/ACL 接管链/Shadow Credentials/ADCS/LAPS/SeBackup/KrbRelay/域内隧道）
     ├── privesc-linux-windows.md   # Linux/Windows 本机提权检查（枚举层默认可做/利用层授权门控）
     ├── dotnet-client-re.md        # .NET 客户端逆向（dnSpy 定位后门/还原私有协议/反序列化前置）
-    ├── field-ops-toolbox.md      # 实战工具箱（shell 稳定/传文件/反弹矩阵/爆破与凭据破解/嗅探）
+    ├── field-ops-toolbox.md      # 实战工具箱（shell 稳定/传文件含批量投递/反弹矩阵/爆破与凭据破解/嗅探）
     └── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
 ```
 
