@@ -55,6 +55,7 @@ references/
     ├── ad-post-compromise.md      # AD 域渗透·立足后（Kerberos-only 纪律/BloodHound/ACL 接管链/Shadow Credentials/ADCS/LAPS/SeBackup/KrbRelay/域内隧道）
     ├── privesc-linux-windows.md   # Linux/Windows 本机提权检查（枚举层默认可做/利用层授权门控）
     ├── dotnet-client-re.md        # .NET 客户端逆向（dnSpy 定位后门/还原私有协议/反序列化前置）
+    ├── windows-hardened-execution.md # Windows 执行受限主机（AppLocker/按程序拦出站/周期还原）：宿主内执行·DLL 劫持·代码签名证书滥用·DCSync-from-Windows（HTB-Hathor 实战沉淀）
     ├── field-ops-toolbox.md      # 实战工具箱（shell 稳定/传文件含批量投递/反弹矩阵/爆破与凭据破解/嗅探）
     └── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
 ```

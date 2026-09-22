@@ -12,6 +12,8 @@
 - 上传响应回显 `path`/`url`/`filename` 字段 → 路径已知；`/uploads/` `/upload/` `/files/` 可直接列目录。
 - 上传后有「校验→移动」「扫描→删除」流程，或上传同时直出预览 URL（竞态 / 解析时机窗口）。
 - 站点特征命中解析漏洞指纹：IIS 6.0 + `.asp;.jpg`；Apache + 可上传 `.htaccess`；Nginx + `x.jpg/y.php` 返回 200（fix_pathinfo）。
+- **上传被拦、但同一份文件换一条代码路径就能落地**：站点同时存在"上传"与"复制 / 重命名 / 移动 / 解压 / 模板导入"等入口，而后者漏了同一套扩展名校验（来源：HTB-Hathor —— 上传接口按白名单拦 `.aspx`，文件管理器的 Copy 只校验**源**扩展名）。
+- **站点是经典 ASP.NET（WebForms）且上传目录在 Web 根内**：`.aspx` / `.ashx` / `.asmx` 等在**请求时**被运行时编译执行，上传即可执行（来源：HTB-Hathor）。
 
 **真实案例指纹** `[本地 src-hunter]`：
 
@@ -151,6 +153,30 @@ printf '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nhttp://169.254.169.254/
 | 上传后路径不返回 | 编辑器遍历 / 时间戳爆破 / 源码泄露 |
 | 删除时间窗 | 竞态：多线程上传 + 立即访问 |
 | 非脚本目录 | `filename=../../webroot/shell.php` 路径穿越 |
+
+### 4.7 校验缺失的二次代码路径（复制 / 重命名 / 移动 / 解压）`[HTB-Hathor 实战]`
+
+**信号**：上传接口对扩展名做了白名单，但同一个后台还提供"复制 / 重命名 / 移动 / 解压 / 导入模板"等操作。
+
+**原理**：这类操作往往由**另一段代码**实现，只校验了**源**文件（或只校验了目标目录），没有校验**目标文件名**。mojoPortal 2.7.0.0 实例：
+
+```csharp
+// Web/Controllers/FileManager/FileServiceController.cs -> CopyItem()
+if (AllowedExtension(file))                     // 只查【源文件】扩展名：shell.txt 合法
+{
+    string newFile = FilePath(newPath + "/" + CleanFileName(singleFileName, "file"));  // 目标名不过白名单
+    result = fileSystem.CopyFile(file, newFile, overwriteExistingFiles);
+}
+```
+
+**验证顺序**（每步保持"只改一个变量"）：
+
+1. 用白名单内的扩展名上传一个最小验证页（如 `.txt`），确认落地路径与可访问 URL；
+2. 用 **Copy**（不是 Rename）把副本命名为可执行后缀 —— Rename 常见实现是"移动并改名"，**源与目标都校验**，会失败；
+3. 直链访问该文件确认执行（HTB-Hathor：一行 `<%@ Page Language="C#" %><% Response.Write(...) %>` 即可）；
+4. **列表过滤 ≠ 文件不存在**：管理界面列表通常也按同一白名单过滤，复制出的 `.aspx` 在界面上看不到，但 URL 可直接访问。
+
+**同类可测点**：重命名、移动、目录复制、ZIP 解压后的落盘、模板/皮肤/插件导入、图片压缩产生的派生文件 —— 任一条路径只要漏了同一套校验，白名单就形同虚设。
 
 ## 5. 工具用法
 

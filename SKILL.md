@@ -124,6 +124,8 @@ user-invocable: true
 | LLM/AI agent / prompt 入口 / RAG | `references/playbooks/llm-prompt-injection.md` |
 | 非标 TCP 端口返回 banner / `ERROR_UNKNOWN_COMMAND` 类私有协议 | `references/notes/dotnet-client-re.md`（客户端逆向定位后门与序列化格式） |
 | Windows .NET 客户端 exe/dll（内网工具、随共享分发） | `references/notes/dotnet-client-re.md` |
+| Windows 主机执行受限（落地 exe 被 AppLocker 拦 / 防火墙按程序拦出站 / PowerShell 受限语言模式） | `references/notes/windows-hardened-execution.md` |
+| 目标目录/文件被周期性还原（放进去的暂存文件与已改脚本会自己变回原样） | `references/notes/windows-hardened-execution.md` §6 |
 
 **工具与自动化**：手工确认后可用 `sqlmap`、`nuclei`、`ffuf` 扩大覆盖面；任何自动工具输出仍需手工复核证据。
 
@@ -140,6 +142,8 @@ user-invocable: true
 **目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理、Kerberos-only（NTLM 全禁）环境适配。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：**Kerberos-only 通用纪律（PAC 时序/状态还原/BH 边过期/工具实名/NTLM 报错三态）**、BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync/**owneredit→dacledit→bloodyAD 接管链**）、**Shadow Credentials（msDS-KeyCredentialLink，免爆破拿身份+NT hash）**、ADCS ESC1、SeBackup→ntds.dit、**KrbRelay（LDAP 中继机器账户入 Administrators，含跨会话抓 NTLM 与从源码自建配方）**、域内隧道、服务凭据离线解密。
 
 **靶场/CTF 二进制栈溢出题目时**（nc 直连二进制服务、需要本地分析可执行文件）→ Read `references/notes/binary-stack-overflow.md`：checksec 防护判定、offset 确定、ret2libc 全链。
+
+**Windows 主机执行受限时**（AppLocker 白名单生效、`Get-NetFirewallRule` 显示按程序拦出站、PowerShell 是 ConstrainedLanguage、或投放的文件被周期性还原）→ Read `references/notes/windows-hardened-execution.md`：环境四查（AppLocker 策略 / 出站规则 / 语言模式 / 还原判据）、**换提问方式（不问"怎么让我的程序跑"，问"谁已经被信任在执行、我能改它哪一部分"）**、DLL 劫持四步法（写探针矩阵 → 自编最小 DLL（**别用 msfvenom 生成，实测被 Defender 删除**）→ ping 无害验证 + 抓包 → 升级为真实动作）、反连两条路（宿主进程内发起 / 借被放行的 exe）、**代码签名证书滥用（回收站 `$R*.pfx` → `pfx2john`+`john` → `Set-AuthenticodeSignature` / `osslsigncode` 重签脚本；内联 `powershell -c` 不受 AppLocker 脚本规则约束）**、周期还原环境的作战纪律（暂存放 `C:\Programdata`、多步串进 DLL 抢时间窗、幂等自动重试）、**DCSync-from-Windows（DSInternals `Get-ADReplAccount`）与 NTLM 禁用时的 overpass-the-hash**、命令与引号坑清单。
 
 ---
 
