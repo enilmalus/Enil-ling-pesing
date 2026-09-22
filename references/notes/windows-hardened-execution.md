@@ -38,7 +38,7 @@ SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and requ
 
 1. **谁被信任在执行**？（计划任务、服务、IIS 宿主、签名过的脚本）
 2. **我能写它的哪一部分**？（DLL、配置、被加载的脚本、被覆盖的 exe）
-3. **同一系统里哪两份校验口径不一致**？HTB-Hathor 的两个实例：共享拦 `.exe` 写入却允许 `.dll`；上传接口拦后缀、Copy 接口却不拦目标名 —— **规则不一致的接缝通常就是洞**。
+3. **同一系统里哪两份校验口径不一致**？HTB-Hathor 的两个实例：共享拦 `.exe` 写入却允许 `.dll`；上传接口拦后缀、Copy 接口却不拦目标名（后者即 `playbooks/file-upload.md` §4.7）—— **规则不一致的接缝通常就是洞**。
 
 ## 3. DLL 劫持四步法
 
@@ -95,7 +95,7 @@ file target.dll && ls -l target.dll                          # 自检：PE32+ DL
 
 | 路线 | 做法 | 为什么可行 |
 |---|---|---|
-| **宿主进程内发起** | 用宿主语言写反连（经典 ASP.NET 站点 → 上传 `.aspx`，`TcpClient` 连回后把命令交给 `cmd.exe`） | 代码跑在 `w3wp.exe` 内：不落地 exe（过 AppLocker），连接从宿主进程出（绕开按程序拦的出站规则） |
+| **宿主进程内发起** | 用宿主语言写反连（经典 ASP.NET 站点 → 上传 `.aspx`，`TcpClient` 连回后把命令交给 `cmd.exe`） | 代码跑在 `w3wp.exe` 内：不落地 exe（过 AppLocker），连接从宿主进程出（绕开按程序拦的出站规则）。⚠️ 上传被扩展名白名单拦下时，落地 `.aspx` 的办法见 `playbooks/file-upload.md` §4.7「校验缺失的二次代码路径（复制/重命名/移动/解压）」 |
 | **借被放行的 exe** | 把自编反连 exe 覆盖成白名单内的 exe（如 `C:\share\Bginfo64.exe`），再由脚本/任务拉起 | 该路径被 AppLocker 放行；且据 0xdf writeup，它**不在出站拦截名单**里（本案实测：该 exe 被拉起后确实成功反连） |
 
 覆盖 exe 的手段：**在目标机内部用本地复制**。HTB-Hathor 实测 SMB 写 `.exe` 被拒，但机内 `copy /y <payload>.txt C:\share\<allowed>.exe` 成功。
