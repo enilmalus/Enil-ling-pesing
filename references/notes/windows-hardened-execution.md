@@ -44,6 +44,17 @@ SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and requ
 
 **① 找点**：可写目录 × 被加载的文件 × 在 AppLocker 白名单里。典型形态是"同名脚本 + DLL 同目录"（脚本里 `DllOpen` 加载该 DLL；本案取自 0xdf writeup 对 `7Zip.au3` 源码的引用确认 + 我们自己行为确认 DLL 确实被加载）。
 
+**怎么判断"谁在周期性执行"**（决定植入时机与重试节奏）：
+
+- **行为确认**（本案实测）：把无害 DLL 覆盖上去后等一轮触发，用抓包（ICMP）或结果文件是否出现来判断周期存在；同一目录两次 `dir` 比 mtime 也能看出文件被反复刷新。
+- **进程轮询**（来源：0xdf writeup 实测）：
+
+  ```cmd
+  FOR /L %i IN (1,1,60) DO (tasklist /FI "imagename eq <可疑 exe 名>" | findstr /v "No tasks" & ping -n 2 127.0.0.1 > NUL)
+  ```
+  该案观察到 AutoIt 约 30 秒一波、随之 Bginfo 约 10 秒一波 —— 周期与**持续时长**决定了"覆盖 DLL 的安全窗口"。
+- **计划任务清单**（通行做法；本案未逐条核验其输出）：`schtasks /query /fo LIST /v | findstr /I "TaskName Task To Run Run As User"` —— `Task To Run` 直接给出执行者路径与运行身份（据此可确认它是否会加载我们改的文件）。
+
 **② 写探针矩阵**（同一份字节、只换扩展名，逐个写入）：
 
 | 探针 | HTB-Hathor 实测 | 含义 |
