@@ -1,6 +1,7 @@
 # Windows 执行受限主机：宿主内执行 / DLL 劫持 / 代码签名滥用
 
 > 来源：HTB-Hathor 实战（2026-09-21，Windows Server 2022 域控，Web 立足 → 域管）。适用于**三类现象同时出现**的主机：AppLocker 白名单生效、防火墙**按程序**拦截出站、暂存文件与脚本会被**周期性还原**。
+> 二手结论取自 0xdf 的 writeup（<https://0xdf.gitlab.io/2022/11/19/htb-hathor.html>，2022-11-19）；正文凡引用处均已显式标注「来源：0xdf writeup」，未标注者为本会话实测或官方文档。
 > 触发场景：已有 Windows 立足点（Web 执行点 / 低权 shell），但落地 exe 被拦、PowerShell 受限、反连打不回来。
 > 分工：域内初始立足见 `ad-initial-access.md`；拿到域凭据后的横向/提权见 `ad-post-compromise.md`；本机提权枚举见 `privesc-linux-windows.md`；文件传输与破解矩阵见 `field-ops-toolbox.md`。
 > **仅限授权测试**：本 note 的 DLL 植入、反连 exe、脚本重签均属 SKILL.md Phase 4「可执行代码」授权项。
@@ -51,7 +52,7 @@ SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and requ
 | `probe.dll` | ✅ 可写 | **入口** |
 | `probe.exe` | ❌ `STATUS_ACCESS_DENIED` | 服务端按扩展名过滤写入 |
 
-只改变一个变量的对照实验，一次分清"权限问题 / 内容问题 / 扩展名问题"。
+只改变一个变量的对照实验，一次分清"权限问题 / 内容问题 / 扩展名问题"。（**过滤发生在哪一层**——只作用于 SMB 写入路径，还是仅拦新建 exe——见 §4 末的待验证说明。）
 
 **③ 自编最小 DLL**（`DllMain` + `system()`）：
 
@@ -167,8 +168,7 @@ impacket-wmiexec -k -no-pass <domain>/Administrator@<DC FQDN>
 
 | 现象 | 正确做法 |
 |---|---|
-| impacket-smbclient `put a.txt b.txt` 报 `Errno 2 No such file` | `put` **只接受一个参数**（本地路径，可绝对路径）；**远端名 = 本地 basename**，落到**远端当前目录**；要改名就先把本地文件改名（只有 samba 版 smbclient 支持 `put local remote`） |
-| `printf 'use share\nput …\nexit\n' \| impacket-smbclient -k …` 卡住不返回 | 脚本化投递改用 Python `SMBConnection(...).kerberosLogin('','','<domain>','','',useCache=True)` + `putFile(share, r'path\file', open(local,'rb').read)`；或 `nxc smb <host> --use-kcache --share <share> --put-file <local> '<remote>'`（`--get-file <remote> <local>` 同样必须配 `--share`） |
+| SMB 投递（`put` 语义 / 管道挂死 / 脚本化上传） | **细节见 `field-ops-toolbox.md` §2「脚本化投递」**：`impacket-smbclient` 的 `put` 只接受一个参数（远端名=basename、落远端当前目录）、喂管道会卡死、改用 `SMBConnection.putFile` 或 `nxc --put-file`（须配 `--share`） |
 | PowerShell 里 `copy /y a b` 报「找不到接受参数」 | `copy` 是 `Copy-Item` 的别名，用 `Copy-Item -Force` |
 | `Import-PfxCertificate` 报 `The PFX file could not be found` | 路径含 `$`（`$Recycle.Bin`、`$RXXXXXX.pfx`）**必须单引号**，双引号会被当变量展开 |
 | `nxc … --use-kcache` 报 `KRB5CCNAME environment variable is not set` | 先 `export KRB5CCNAME=/tmp/krb5cc_1000`（`kinit` 默认 ccache） |

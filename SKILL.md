@@ -157,6 +157,7 @@ user-invocable: true
 - 内网进一步测试 → 回到 Phase 0 补充 in-scope 确认
 - 提权路径评估 → 枚举层（只读检查）默认可做，如实报告「存在提权路径」；实际利用属「可提权」授权项，授权明确允许时按 `references/notes/privesc-linux-windows.md` 决策树执行，无授权止步于路径存在证明
 - shell 后实操（传文件/升级 shell/凭据爆破验证/快捕流量）→ `references/notes/field-ops-toolbox.md`（工具矩阵 + 速率纪律 + 授权门禁）
+- 立足点是**执行受限主机**（AppLocker 拦未签名 exe / 防火墙按程序拦出站 / 落地文件被周期性还原）→ `references/notes/windows-hardened-execution.md`（宿主内执行、DLL 劫持、代码签名证书重签高权脚本、周期还原下的作战纪律）
 
 ---
 
