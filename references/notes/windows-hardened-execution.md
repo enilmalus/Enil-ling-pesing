@@ -27,7 +27,7 @@
 |---|---|---|
 | AppLocker 策略 | `powershell -c "Get-AppLockerPolicy -Effective -Xml" > C:\Programdata\al.xml` | 看 DLL / Exe / Script 三类规则。⚠️ 该 cmdlet **只对 GP 下发的策略有效**，本机策略要用 `-Local`（微软文档明示）；若 PS 受限读不到，退化为行为验证（试跑被拦的程序看报错）。判读形态（来源：0xdf HTB-Hathor writeup 2022-11-19 的策略 dump）：**按路径放行的 DLL 与 EXE（如 `C:\share\scripts\x.dll`、`C:\share\x.exe`）就是留好的执行点**；显式拦 `mshta`/`msbuild`/`installutil`/`msdt` 等说明常规绕过已被防 |
 | 出站防火墙 | `powershell -c "Get-NetFirewallRule -PolicyStore ActiveStore \| ? {$_.Action -eq 'Block'} \| Get-NetFirewallApplicationFilter \| select -ExpandProperty Program"` | **命令语法已在 Windows 11 实测通过（2026-09-22，只读）**；等价写法 `Get-NetFirewallRule -PolicyStore ActiveStore -Action Block \| Get-NetFirewallApplicationFilter -PolicyStore ActiveStore` 同样可用（无程序过滤的规则会输出 `Any`）。判读：拦截**按程序**生效 ⇒ **反连要换进程宿主，而不是换端口**。本案形态（来源：0xdf writeup）：16 条按程序拦出站，命中 `cscript`/`powershell`/`powershell_ise`/`regsvr32`/`rundll32`/`wscript` |
-| PowerShell 语言模式 | `$ExecutionContext.SessionState.LanguageMode` | `ConstrainedLanguage`（应用池身份常见）⇒ 别指望 PS 脚本开箱即用，`New-Object` 之类会失败 |
+| PowerShell 语言模式 | `$ExecutionContext.SessionState.LanguageMode` | `ConstrainedLanguage` ⇒ 别指望 PS 脚本开箱即用（`New-Object` 之类会失败）。**该状态通常只出现在应用池/低权身份**（0xdf writeup 实测：应用池身份 `web` 即 ConstrainedLanguage），而**交互式登录的服务账号往往是 FullLanguage**（本案 `ginawild` 的 PS 可直接跑 `Import-PfxCertificate`/`Set-AuthenticodeSignature`）⇒ §5 的签名动作要在后者上下文里做 |
 | 是否周期还原 | 同一目录两次 `dir` 比 mtime；放进去的暂存文件是否消失 | HTB-Hathor 实测：道具目录（`C:\share`）与目标脚本会自己变回原样 ⇒ 按 §6 作战 |
 
 SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and required` ⇒ **中继认证到 SMB 不成立**（中继者拿不到会话密钥、无法签名），但**不影响用有效凭据正常登录**；`(NTLM:False)` ⇒ 认证只能走 Kerberos。
@@ -42,7 +42,7 @@ SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and requ
 
 ## 3. DLL 劫持四步法
 
-**① 找点**：可写目录 × 被加载的文件 × 在 AppLocker 白名单里。典型形态是"同名脚本 + DLL 同目录"（脚本里 `DllOpen` 加载该 DLL；本案取自 0xdf writeup 对 `7Zip.au3` 源码的引用确认 + 我们自己行为确认 DLL 确实被加载）。
+**① 找点**：可写目录 × 被加载的文件 × 在 AppLocker 白名单里。典型形态是"同名脚本 + DLL 同目录"。本案的"被加载"是这样确认的：0xdf writeup 读 `7Zip.au3` 源码确认了脚本对 `7-zip64.dll` 的引用关系，我们再用**行为**确认（把 DLL 换成只做 ping 的版本，抓包收到 ICMP ⇒ 它确实被加载执行）。
 
 **怎么判断"谁在周期性执行"**（决定植入时机与重试节奏）：
 
@@ -126,9 +126,10 @@ Set-AuthenticodeSignature -FilePath C:\path\target.ps1 -Certificate $cert | Form
 ```
 
 ```bash
-# Kali 侧：osslsigncode 官方 README 明确支持 .ps1 / .ps1xml / .psc1 / .psd1 / .psm1 / .cdxml / .mof / .js
+# 备用路线（本案未实测）：osslsigncode 官方 README 明确支持 .ps1 / .ps1xml / .psc1 / .psd1 / .psm1 / .cdxml / .mof / .js
 osslsigncode sign -pkcs12 stolen.pfx -pass '<pfx 口令>' -h sha256 -in mod.ps1 -out signed.ps1
 ```
+> 本案实际走的是上面的**机内 `Set-AuthenticodeSignature`**（已实测 `Status : Valid`）；Kali 侧这条留作没有可用 PowerShell 上下文时的替代方案。
 
 **④ 内联执行不受脚本规则约束**：AppLocker 的 Script 规则**只涵盖脚本文件格式**——微软《[Script rules in AppLocker](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/applocker/script-rules-in-applocker)》原文列出的是 `.ps1 .bat .cmd .vbs .js` 这些**文件**；`powershell -nop -c "…"` 这类内联命令不落地上述任何文件格式，因此不在该规则管辖内（**本案实测**：机内重签动作正是用内联 `-c` 完成，并成功取得 `Status : Valid`）。
 > 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 并非"被脚本宿主以文件形式启动"，理论上同样不受限 —— 这一条属**推断，本案未实测**（本案改的是主脚本本体）。
@@ -164,7 +165,7 @@ Copy-Item C:\Programdata\dc.txt C:\<可读共享>\dc.txt -Force                 
 ```
 > 本节只保留"在执行受限主机上怎么落地"的形态；**cmdlet 参数、输出字段解读、与 KrbRelay 的分界见 `ad-post-compromise.md` §2.8**（避免两处重复维护）。
 
-- 前提：运行账号具备 `Replicating Directory Changes` / `...All`。**本案实测**：该审计工具（Get-bADpasswords）的运行账号即具备 —— 工具本身就是靠复制协议读取密码哈希，所以"先拿审计类工具的运行账号"通常是这条路的入口；是否普遍成立以该工具的 README 为准。AD 侧细节（与 §5.5 KrbRelay 的分界、输出字段解读）见 `ad-post-compromise.md` §2.8。
+- 前提：运行账号具备 `Replicating Directory Changes` / `...All`。**本案实测**：该审计工具（Get-bADpasswords）的运行账号即具备 —— 工具本身就是靠复制协议读取密码哈希，所以"先拿审计类工具的运行账号"通常是这条路的入口；是否普遍成立以该工具的 README 为准。
 - 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`（本案实测输出形态）。**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票**——此路为备用方案，**本案未实测**（本案 RC4 可用，`getTGT -hashes` 一次成功）。
 - 结果先写 `C:\Programdata` 再回抄共享，避免依赖交互 shell（对"没有稳定 shell"的场景尤其重要）。
 - **NTLM 禁用 ⇒ 不能 Pass-the-Hash**，改走 overpass-the-hash：
