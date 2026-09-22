@@ -27,7 +27,7 @@
 |---|---|---|
 | AppLocker 策略 | `powershell -c "Get-AppLockerPolicy -Effective -Xml" > C:\Programdata\al.xml` | 看 DLL / Exe / Script 三类规则。⚠️ 该 cmdlet **只对 GP 下发的策略有效**，本机策略要用 `-Local`（微软文档明示）；若 PS 受限读不到，退化为行为验证（试跑被拦的程序看报错）。判读形态（来源：0xdf HTB-Hathor writeup 2022-11-19 的策略 dump）：**按路径放行的 DLL 与 EXE（如 `C:\share\scripts\x.dll`、`C:\share\x.exe`）就是留好的执行点**；显式拦 `mshta`/`msbuild`/`installutil`/`msdt` 等说明常规绕过已被防 |
 | 出站防火墙 | `powershell -c "Get-NetFirewallRule -PolicyStore ActiveStore \| ? {$_.Action -eq 'Block'} \| Get-NetFirewallApplicationFilter \| select -ExpandProperty Program"` | **命令语法已在 Windows 11 实测通过（2026-09-22，只读）**；等价写法 `Get-NetFirewallRule -PolicyStore ActiveStore -Action Block \| Get-NetFirewallApplicationFilter -PolicyStore ActiveStore` 同样可用（无程序过滤的规则会输出 `Any`）。判读：拦截**按程序**生效 ⇒ **反连要换进程宿主，而不是换端口**。本案形态（来源：0xdf writeup）：16 条按程序拦出站，命中 `cscript`/`powershell`/`powershell_ise`/`regsvr32`/`rundll32`/`wscript` |
-| PowerShell 语言模式 | `$ExecutionContext.SessionState.LanguageMode` | `ConstrainedLanguage` ⇒ 别指望 PS 脚本开箱即用（`New-Object` 之类会失败）。**该状态通常只出现在应用池/低权身份**（0xdf writeup 实测：应用池身份 `web` 即 ConstrainedLanguage），而**交互式登录的服务账号通常宽松得多**（**本案实测**：`ginawild` 的 PS 会话可直接跑 `Import-PfxCertificate` + `Set-AuthenticodeSignature` 并取得 `Status : Valid`；⚠️ 这只能说明**这两个 cmdlet 在该上下文可用**，不等于语言模式就是 FullLanguage）⇒ §5 的签名动作要在这种上下文里做 |
+| PowerShell 语言模式 | `$ExecutionContext.SessionState.LanguageMode` | CLM 的触发条件是**该会话运行在系统应用控制策略下** —— 微软《[about_Language_Modes](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_language_modes)》原文：检测到 **AppLocker / WDAC** 策略时 PowerShell 自动进入 `ConstrainedLanguage`，且策略下对 **dot-sourcing 与模块导入另有额外限制**。所以**是否 CLM 取决于策略覆盖范围，而非身份类型**：本案应用池身份 `web` 被判 CLM（0xdf writeup 实测），而 `ginawild` 的会话**实测可直接跑** `Import-PfxCertificate` + `Set-AuthenticodeSignature`（取得 `Status : Valid`）⇒ §5 的签名动作要在这种未被策略收紧的上下文里做。**开工前先用左边这条命令实测当前会话**，不要靠身份推断 |
 | 是否周期还原 | 同一目录两次 `dir` 比 mtime；放进去的暂存文件是否消失 | HTB-Hathor 实测：道具目录（`C:\share`）与目标脚本会自己变回原样 ⇒ 按 §6 作战 |
 
 SMB 侧两个先验（来自 Nmap 与 nxc）：`Message signing enabled and required` ⇒ **中继认证到 SMB 不成立**（中继者拿不到会话密钥、无法签名），但**不影响用有效凭据正常登录**；`(NTLM:False)` ⇒ 认证只能走 Kerberos。
@@ -132,7 +132,7 @@ osslsigncode sign -pkcs12 stolen.pfx -pass '<pfx 口令>' -h sha256 -in mod.ps1 
 > 本案实际走的是上面的**机内 `Set-AuthenticodeSignature`**（已实测 `Status : Valid`）；Kali 侧这条留作没有可用 PowerShell 上下文时的替代方案。
 
 **④ 内联执行不受脚本规则约束**：AppLocker 的 Script 规则**只涵盖脚本文件格式**——微软《[Script rules in AppLocker](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/applocker/script-rules-in-applocker)》原文列出的是 `.ps1 .bat .cmd .vbs .js` 这些**文件**；`powershell -nop -c "…"` 这类内联命令不落地上述任何文件格式，因此不在该规则管辖内（**本案实测**：机内重签动作正是用内联 `-c` 完成，并成功取得 `Status : Valid`）。
-> 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 并非"被脚本宿主以文件形式启动"，理论上同样不受限 —— 这一条属**推断，本案未实测**（本案改的是主脚本本体）。
+> 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 并非"被脚本宿主以文件形式启动"，**未必**受脚本规则管辖 —— 但这不是一条干净的路：微软《about_Language_Modes》明确"策略下对 dot-sourcing 与模块导入另有额外限制"。**属推断，本案未实测**（本案改的是主脚本本体）。
 
 **⑤ 触发**：改脚本 → 重签 → 触发**原本就会运行该脚本的计划任务**。HTB-Hathor 的形态：`run.vbs` 用 `eventcreate` 写一条 Event ID `444`，计划任务监听该事件、以**另一个高权账号**执行审计脚本 —— 于是我们借"签名过 + 高权上下文"的脚本拿到了下一个域身份。
 
