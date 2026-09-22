@@ -185,8 +185,8 @@ Copy-Item C:\Programdata\dc.txt C:\<可读共享>\dc.txt -Force
 ```
 来源：HTB-Hathor（2026-09-21 实测）
 
-- 需要运行账号具备 `Replicating Directory Changes` / `...All` —— **口令审计类工具的运行账号通常天然具备**（工具本身就是靠复制协议读取密码哈希），无需先成为域管。
-- 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`：**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票**，别只留 NT hash。
+- 需要运行账号具备 `Replicating Directory Changes` / `...All`。本案实测：该口令审计工具的运行账号即具备（工具靠复制协议读取密码哈希），所以"先拿审计类工具的运行账号"通常是入口；是否普遍成立以该工具 README 为准。
+- 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`（本案实测输出形态）：**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票** —— 该备用路本案未实测（本案 RC4 可用）。
 - 结果先写 `C:\Programdata` 再回抄共享，避免依赖交互 shell；开头写一行 `IDENTITY: $(whoami)` 自证执行身份。
 - **NTLM 禁用 ⇒ 不能 PTH**，改走 overpass-the-hash：`impacket-getTGT <domain>/Administrator -hashes :<NT> -dc-ip <ip>` → `export KRB5CCNAME=<user>.ccache` → `impacket-wmiexec -k -no-pass <domain>/Administrator@<DC FQDN>`。
 - 与 §5.5 KrbRelay 的分界：**账号自己有复制权限**就直接用本节；只有"能中继机器账户"的条件时才走 §5.5。

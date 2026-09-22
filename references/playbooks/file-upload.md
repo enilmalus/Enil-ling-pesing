@@ -13,7 +13,7 @@
 - 上传后有「校验→移动」「扫描→删除」流程，或上传同时直出预览 URL（竞态 / 解析时机窗口）。
 - 站点特征命中解析漏洞指纹：IIS 6.0 + `.asp;.jpg`；Apache + 可上传 `.htaccess`；Nginx + `x.jpg/y.php` 返回 200（fix_pathinfo）。
 - **上传被拦、但同一份文件换一条代码路径就能落地**：站点同时存在"上传"与"复制 / 重命名 / 移动 / 解压 / 模板导入"等入口，而后者漏了同一套扩展名校验（来源：HTB-Hathor —— 上传接口按白名单拦 `.aspx`，文件管理器的 Copy 只校验**源**扩展名）。
-- **站点是经典 ASP.NET（WebForms）且上传目录在 Web 根内**：`.aspx` / `.ashx` / `.asmx` 等在**请求时**被运行时编译执行，上传即可执行（来源：HTB-Hathor）。
+- **站点是经典 ASP.NET（WebForms）且上传目录在 Web 根内**：`.aspx` / `.ashx` / `.asmx` 等在**请求时**被运行时编译执行，上传即可执行（来源：HTB-Hathor 实测；运行时编译机制见微软《ASP.NET Compilation Overview》—— 预编译的收益正是"消除首次请求时才编译"的延迟）。
 
 **真实案例指纹** `[本地 src-hunter]`：
 
@@ -172,7 +172,7 @@ if (AllowedExtension(file))                     // 只查【源文件】扩展�
 **验证顺序**（每步保持"只改一个变量"）：
 
 1. 用白名单内的扩展名上传一个最小验证页（如 `.txt`），确认落地路径与可访问 URL；
-2. 用 **Copy**（不是 Rename）把副本命名为可执行后缀 —— Rename 常见实现是"移动并改名"，**源与目标都校验**，会失败；
+2. 用 **Copy**（不是 Rename）把副本命名为可执行后缀 —— 本案 Rename 的实现是"移动并改名"，**源与目标都要过校验**，会失败（mojoPortal 源码级结论：`RenameItem` → `MoveOrRename()` 对源与目标双向调 `IsExtAllowed`）；
 3. 直链访问该文件确认执行（HTB-Hathor：一行 `<%@ Page Language="C#" %><% Response.Write(...) %>` 即可）；
 4. **列表过滤 ≠ 文件不存在**：管理界面列表通常也按同一白名单过滤，复制出的 `.aspx` 在界面上看不到，但 URL 可直接访问。
 
