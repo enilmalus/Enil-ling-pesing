@@ -41,11 +41,15 @@ profile, edit, view, filename, object, num, key, userid, uuid, group, role
 
 1. **建两个测试账号**（A=攻击者，B=受害者），确定基线行为：A 读自己资源 = 200。
 2. **BOLA/IDOR**：A 的 token 换成 B 的对象 ID，看是否 200 返回 B 数据；再测写操作（PUT/DELETE）越权。
-3. **Mass Assignment**：注册/更新接口 body 里加 `is_admin`/`role`/`verified` 等字段，看响应是否回显被接受。
-4. **速率/配额**：登录/短信/列表端点连发 50 次看是否 429；`?per_page=10000` 测列表上限。
-5. **CORS**：带攻击者 Origin 探 `/api/me`，看是否反射 + `Allow-Credentials`（浏览器 PoC 才算数）。
-6. **隐藏端点**：枚举版本路径 + 拉全 OpenAPI/Swagger spec，diff 新旧版本的行为差异。
-7. **拿最小证据即停**：BOLA 取 1 条样本、Mass Assignment 证明 token 有 admin 即止。
+3. **功能级越权（OWASP API #5）** `[2026-09 实战沉淀]`：用**低权 token**（普通用户 / 会员 / 只读角色）逐个探**管理端接口**——判据不是「这个接口我能不能访问」，而是「**这个角色该不该访问**」。
+   - **零写入判定可达性**：对写接口发 **GET**，返回 **405 而非 403** = 请求已穿过鉴权过滤器到达路由层 → 该接口对当前角色开放。对照：不存在的路径返回 404。
+   - **读接口与写接口必须分开扫**：只扫读接口会漏掉最严重的写越权（改任意用户密码 / 删账号 / 新增数据源 / 任意文件上传）。
+   - 批量清单与实战细节见 `references/notes/jeecg-boot.md` §2–§3（JeecgBoot/Spring Security 系目标已验证；其他框架需先确认其「方法不允许」与「无权限」的响应码可区分）。
+4. **Mass Assignment**：注册/更新接口 body 里加 `is_admin`/`role`/`verified` 等字段，看响应是否回显被接受。
+5. **速率/配额**：登录/短信/列表端点连发 50 次看是否 429；`?per_page=10000` 测列表上限。
+6. **CORS**：带攻击者 Origin 探 `/api/me`，看是否反射 + `Allow-Credentials`（浏览器 PoC 才算数）。
+7. **隐藏端点**：枚举版本路径 + 拉全 OpenAPI/Swagger spec，diff 新旧版本的行为差异。
+8. **拿最小证据即停**：BOLA 取 1 条样本、Mass Assignment 证明 token 有 admin 即止。
 
 ## 4. Payload 区（每条标注出处）
 

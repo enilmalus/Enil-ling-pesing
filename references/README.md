@@ -49,6 +49,8 @@ references/
     ├── empirecms-cms.md          # 帝国 EmpireCMS 方法论（stock 源码白盒对照/cookie 伪造链/负向锚点/痕迹纪律）
     ├── multi-target-orchestration.md # 多子域/多站点并行编排（聚类→分治→交叉回归→矩阵报告）
     ├── qiyuesuo-cms-storage.md   # 契约锁/电子签平台+官网CMS链+对象存储+DLP交付（三轮实战沉淀）
+    ├── jeecg-boot.md             # JeecgBoot（含定制版）管理端越权方法论（/sys 读写分开普查、GET 探 405 判可达、任意表/列读取、上传功能越权、定时任务「能入库≠能执行」的源码核对法、审计日志二次挖掘）
+    ├── self-check-methodology.md # 收尾自检方法论（报告初稿后必跑的 5 轮框架 + 六条核心教训 + 自检自身的纪律（含结论不得超出证据边界）+ 交付前全量复现验证）
     ├── methodology-standards-map.md # PTES/WSTG/NIST 800-115/OSSTMM/ATT&CK 对齐映射 + WSTG 12 类查漏表
     ├── llm-agent-pentest-research.md # LLM 渗透代理论文蒸馏（PentestGPT/EnIGMA/Cybench 等→操作纪律）
     ├── ad-initial-access.md       # AD 域渗透·初始访问（博客 HTB writeup 系列沉淀：零凭据→域内立足）

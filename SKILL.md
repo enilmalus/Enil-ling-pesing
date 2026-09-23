@@ -131,9 +131,13 @@ user-invocable: true
 
 **Phase 3 收尾查漏**：对高价值入口按 `references/notes/methodology-standards-map.md` §2 的 WSTG 12 类对照表过一遍，标记已触达 / 未触达 / 不适用（N/A 需写理由，进报告覆盖声明）。
 
+**⚠️ 只沿「前端 JS → 端点」一条路径推，会系统性漏掉框架自带、前端零调用的管理面。** 确认框架后必须**叠加一条「按框架高危组件清单反向枚举」的路径**：定时任务 / 数据源管理 / 报表引擎 / Actuator / 文件上传 / 动态字典查询 / 代码生成器等，逐个探测。同时**读接口与写接口必须分别普查**（只扫读会漏掉严重级写接口）。
+
 **指纹命中国产组件时**（weaver/seeyon/tongda/landray/yongyou/kingdee/hikvision/dahua 等）→ Read `references/dictionaries/chinese-srcfingerprints.md`；弱口令/默认配置探测 → Read `references/dictionaries/default-credentials-cn.md`。
 
 **目标为微前端/微服务网关架构时**（single-spa/qiankun/SystemJS、`mftcc-*`、`/gateway/<服务名>/` 路由、token 走请求头）→ Read `references/notes/mftcc-vue-microfrontend.md`：配置文件情报提取、webpack chunk hash 还原法、API 端点批量鉴权探测、网关鉴权三层次模型（垂直越权判定）、验证码/密码重置链测试清单、前端加密请求构造。
+
+**命中 JeecgBoot（含定制版）时**（`/_app.config.js` 的 `window.__PRODUCTION__*__CONF__`、`VITE_GLOB_API_URL` 给出的 API 前缀、`X-Access-Token`+`X-Tenant-Id` 头约定、localStorage `TOKEN__`、错误体泄露 context-path）→ Read `references/notes/jeecg-boot.md`：**管理端接口普查清单（读接口与写接口必须分开扫）**、GET 探 405 零写入判定可达性、`/sys/dict/queryTableData` 任意表/任意列读取（报错驱动发现法）、`/sys/common/upload` 上传功能越权与扩展名黑名单绕过、`/sys/quartzJob` 区分「能入库」与「能执行」（拉源码核对法）、SSO 换 JWT 的字段缺失坑（`code`/`type`/`redirectUri` 三字段须齐全）与单账号单会话（凭据互踢）、审计日志二次挖掘（日志注入 + 历史攻击痕迹）、软删除导致用户名不可复用等凭据纪律。
 
 **命中契约锁/电子签、RuoYi CMS、对象存储（MinIO/FastDFS）或同 IP 多端口集群时**（qiyuesuo/qyswebapp/qysoss/qysopen、`/prod-api/`+captchaImage、"认证失败，无法访问系统资源"、`:19000` S3 XML）→ Read `references/notes/qiyuesuo-cms-storage.md`：多端口同源聚类判别、契约锁前端 RSA 私钥与加密协议还原清单、RuoYi 后台速查表、对象存储匿名权限三连测（列/写/删）、老中间件类存在性差分、DLP 加密文档交付流程。
 
@@ -178,6 +182,8 @@ user-invocable: true
 7. 测试痕迹清单齐吗（每个写入点一条：内容标记、可见性等级、能否自删）？
 
 **测试痕迹清单（第 7 条展开）**：报告附录 MUST 含「测试痕迹与账号」，按清理优先级排序——公开可见痕迹（优先，提交即展示无法自删的内容，如无审核留言）> 后台可见（错误报告/待审内容）> 仅数据库入库 > 注册的测试账号与站内信。逐条列唯一内容标记（`probe-<日期>` 式）与建议动作；测试账号密码交甲方不留明文报告；注明登录尝试次数与默认凭据测试次数（自证未做爆破）。写入型探针（文件/内容）测试前先判可见性等级，公开面只发一条最小探针（详见 `references/notes/empirecms-cms.md` §7）。
+
+**⚠️ 初稿完成后必须再跑「收尾自检」，不要直接交付。** 实战数据：初稿后又跑了**六轮收尾自检**，**补出 11 条发现（占第一批 21 条的 52%，含唯一的严重项与 2/3 的高危项）**。自检为固定的 5 轮框架（类目对照 / 端点清点 / 绕过矩阵 / 交叉回归 / 证据复核），**每轮必须换一个切入点**——重复同一路径只会漏同样的东西。→ Read `references/notes/self-check-methodology.md`：5 轮框架、六条核心教训（框架自带管理面反向枚举 / 读写分别普查 / 报错接口补参重测 / 已获数据二次挖掘 / GET 探 405 / 重定向逐端点）、自检自身的纪律（**结论不得超出证据边界** / 勘误要显式标注 / 自检脚本的假阳性 / 结论记录快照时间）、交付前的全量复现验证（区分「token 失效」与「漏洞被修复」）。
 
 **MUST 输出结构**（模板见 `references/templates/report-template.md`，存在则 Read 后套用）：
 
