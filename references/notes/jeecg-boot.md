@@ -11,7 +11,9 @@
 
 一个低权账号（会员/普通用户）即可拿到管理端**全部读写能力**。这不是单点漏洞，是**一条根因的多个侧面**——报告时要合并成一条严重问题，不要拆成 N 条中低危。
 
-**为什么是「严重」而非 `idor-authz.md` 参考的「认证后任意操作 = 8.8（高）」**：聚合影响超出了单一「任意操作」——同时包含 ① **改任意用户密码**（请求体不含旧密码 → 可重置管理员口令 → 完全接管）② 数据库 root 凭据泄露 ③ 56 万条审计日志 ④ 任意表/任意列读取。按 `AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H` 计 = **9.4（严重）**。
+**为什么是「严重」而非 `playbooks/idor-authz.md` 参考的「认证后任意操作 = 8.8（高）」**：聚合影响超出了单一「任意操作」——同时包含 ① **改任意用户密码**（请求体不含旧密码 → 可重置管理员口令 → 完全接管）② 数据库 root 凭据泄露 ③ 56 万条审计日志 ④ 任意表/任意列读取。
+
+> **评分口径（两个向量别混用）**：单看「认证后任意操作」= `AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H` = **8.8（高）**——`playbooks/idor-authz.md` 的参考值正确。本案要定「严重」，依据是**低权主体跨越权限边界取得管理面能力**（会员 → 可重置管理员口令），按**范围变更（S:C）**建模 = `AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H` = **9.9（严重）**。**报告里必须写明用的是哪个向量**——只给分数不给向量，复核时无法复现（S:U 与 S:C 差 1.1 分，正是「高 vs 严重」的分界）。
 
 ---
 
@@ -117,7 +119,9 @@ curl -sk "https://target/dview/sys/dict/queryTableData?table=sys_user&text=usern
 | 项 | 说明 |
 |---|---|
 | 参数 | `table` / `text` / `code`，三者**全部字符串拼接进 SQL** |
-| 敏感字段黑名单 | 通常存在（`password`/`PASSWORD`/`passWord` 全拦，做了大小写归一化）；`email`/`realname` 等常放行 |
+| 敏感字段黑名单 | 通常存在（`password`/`PASSWORD`/`passWord` 全拦，做了大小写归一化）；`email`/`realname` 等常放行。**上游 3.9.5 实证**：`AbstractQueryBlackListHandler.ruleMap` 只配了 `sys_user → password,salt`，`isPass()` 先对 `dictCode` 串 `toLowerCase()` 再比对（`ruleMap` 注释要求「全部配置成小写」）→ 大小写变体同拦；另有 `SensitiveTableCheckUtil` 挡 `sys_user → password,salt`、`sys_data_source → db_url,db_username,db_password` |
+| 上游校验链（3.9.5） | `SensitiveTableCheckUtil.checkForbiddenFields` → `SqlInjectionUtil.getSqlInjectTableName` 转义 → 表字典白名单 `dictTableWhiteListCheckByDict` → 黑名单 `isPass` → `filterContentMulti`。SQL 本体在 `SysDictMapper.xml:185`：`select ${text} as "text", ${code} as "value" from ${table}`（**`${}` 字符串拼接，不是 `#{}` 占位**）——所谓「应用层过滤器」就是这条链 |
+| 接口状态 | 上游 3.9.5 该接口标 `@Deprecated`，注释写「目前暂未找到调用的地方」——**前端零调用、框架残留**，正属 §9 第 1 条那类入口；目标上仍可访问 |
 | 注入 payload | 常被**应用层过滤器 + CDN/WAF 双层拦截**（`;select` 被过滤器拦、`union select` 被 WAF 403） |
 | 准确归类 | **SQL 注入（参数拼接）**，实际利用形式为**任意表/任意列读取** |
 | 纪律 | 最多 1–3 条样本、全部脱敏；**不要尝试绕过黑名单去拖密码哈希** |
@@ -145,38 +149,54 @@ curl -sk "https://target/dview/sys/dict/queryTableData?table=sys_user&text=usern
 
 **这是最容易误判的一条。** 看到「`jobClassName` 无白名单校验」不要直接下「RCE」结论——**先拉源码确认执行机制**。
 
-官方实现（`QuartzJobServiceImpl`，**GitHub main 分支**）：
+官方实现（**已逐行核对 JeecgBoot 3.9.5 / main@7436405**，文件：`jeecg-boot/jeecg-module-system/jeecg-system-biz/src/main/java/org/jeecg/modules/quartz/service/impl/QuartzJobServiceImpl.java`）：
 
 ```java
-JobDetail jobDetail = JobBuilder.newJob(getClass(jobClassName).getClass())...;
-private Job getClass(String classname) throws Exception {
+// 创建任务（:143）
+JobDetail jobDetail = JobBuilder.newJob(getClass(jobClassName).getClass()).withIdentity(id)...build();
+
+// 类名不存在时（:157）
+throw new JeecgBootException("后台找不到该类名：" + jobClassName, e);
+
+// 安全加载（:180-193）——含包名白名单与接口校验，别只记「裸 Class.forName + 强转」
+private static Job getClass(String classname) throws Exception {
+    // 包名白名单校验，防止任意类实例化导致RCE
+    if (classname == null || !classname.startsWith("org.jeecg.")) {
+        throw new IllegalArgumentException("非法的任务类名：" + classname + "，仅允许 org.jeecg 包下的Job类");
+    }
     Class<?> clazz = Class.forName(classname, true, Thread.currentThread().getContextClassLoader());
+    // 校验是否实现了 org.quartz.Job 接口
+    if (!Job.class.isAssignableFrom(clazz)) {
+        throw new IllegalArgumentException("非法的任务类：" + classname + "，必须实现 org.quartz.Job 接口");
+    }
     return (Job) clazz.getDeclaredConstructor().newInstance();     // ← 强转 (Job)
 }
 ```
 
-**关键约束**：类必须 ①存在 ②**实现 `org.quartz.Job`** ③有无参构造。
+**关键约束**（3.9.5 已**显式强制**，不是隐含条件）：类名必须以 `org.jeecg.` 开头 ①、必须实现 `org.quartz.Job` ②、有无参构造 ③。**因此「加载任意类」在 3.9.5 上不成立**——要打 `Class.forName` 这个面，得先找到 `org.jeecg.` 包下、实现 `Job`、且 `execute()` 里能执行命令的类。
 
-> ⚠️ **定制版行为可能与官方不同，务必实测确认**：官方源码在类名不存在时会 `throw new JeecgBootException("后台找不到该类名：" + jobClassName)`；但**本次目标对不存在的类名也返回「创建定时任务成功」**（记录入库、`status` 为 `null`），说明定制版**吞掉了这个异常**。因此：
+> ⚠️ **定制版必须实测，不要照搬官方结论**：官方 3.9.5 对类名不存在抛 `JeecgBootException("后台找不到该类名："…)`、对包名/接口不合规抛 `IllegalArgumentException`；但**本次目标对不存在的类名也返回「创建定时任务成功」**（记录入库、`status` 为 `null`），说明该定制版**吞掉了异常**——它可能构建于上述加固之前，或改写了 `getClass()`（**加固的引入版本未核实**：本档核对的是 depth=1 浅克隆，无法回溯提交历史）。因此：
 > - **「能入库」的判据是实测**（不存在的类名是否返回成功），不要照搬官方源码推断；
-> - **「能否执行」仍需回到 `(Job)` 强转这条约束**上判断（需枚举 classpath 上的 Job 实现类）。
+> - **「能否执行」回到两条硬约束**（`org.jeecg.` 前缀 + 实现 `Job`）上判断（需枚举 classpath 上的 Job 实现类）。
 
 | 已实证（可写报告） | 未实证（不可写） |
 |---|---|
 | 低权 token 可访问 `/sys/quartzJob/*` 全组 | 直接 RCE |
-| `jobClassName` **无白名单、无存在性校验**（不存在的类名也创建成功） | |
+| `jobClassName` 在**本目标上**无白名单、无存在性校验（不存在的类名也创建成功；官方 3.9.5 已有 `org.jeecg.` 包白名单，见上） | |
 | 可创建/删除任意任务、可指定任意 cron | |
 | `resume`/`pause` **接受 GET**（`?id=` 即可触发） | |
 
 **真实危害面**（替代 RCE 的准确定性）：**滥用已有任务**——把 `KingdeeJob`（数据导入）之类设成高频 cron → 业务数据异常 / 资源耗尽；批量创建任务 → 调度器 DoS。
 
-**判据**：先枚举目标 classpath 上的 Job 实现类，**逐个读 `execute()` 看有没有能执行命令的**。官方核心模块只有 5 个左右（`SampleJob`/`SampleParamJob`/`AsyncJob`/`SendMsgJob`/`UserUpadtePwdJob`），**定制版会有额外业务 Job 类**（本次目标另有 `KingdeeJob` 等，可从 `/sys/quartzJob/list` 的存量任务反推）。没有能执行命令的 → 不能 RCE。
+**判据**：先枚举目标 classpath 上的 Job 实现类，**逐个读 `execute()` 看有没有能执行命令的**。官方核心模块只有 5 个（已核对 3.9.5：`SampleJob`/`SampleParamJob`/`AsyncJob` 在 `quartz/job/`，`SendMsgJob` 在 `message/job/`、`UserUpadtePwdJob` 在 `system/job/`，末者拼写为上游原样），**定制版会有额外业务 Job 类**（本次目标另有 `KingdeeJob` 等，可从 `/sys/quartzJob/list` 的存量任务反推）。没有能执行命令的 → 不能 RCE。
 
 ---
 
 ## 7. 认证链与凭据纪律
 
-### 7.1 SSO 换取 JWT
+### 7.1 SSO 换取 JWT（**定制版端点**）
+
+> 上游 3.9.5 **无 `unifiedLogin`**（全仓库 grep 零命中；官方账号密码登录是 `/sys/login`）——该端点属**定制版自研**，字段名与语义都要按目标前端 bundle 现场确认，不要假定其他 JeecgBoot 目标也有。
 
 ```bash
 # 1) 拿 code（redirect_uri 必须是已注册的白名单值）
@@ -189,7 +209,7 @@ curl -sk -X POST "https://<target>/dview/sys/unifiedLogin" -H 'Content-Type: app
 
 > **踩坑**：`unifiedLogin` 的 body 常需 `code` + `type` + `redirectUri` **三字段齐全**，缺 `type`/`redirectUri` 会报「code错误，请重试」，**看起来像 code 失效，实际是参数缺失**。字段名从前端 bundle 里 grep `unifiedLogin` 的调用点确认。
 
-> **占位符**：`<auth域>` = 统一认证域名；`<target>` = 业务系统域名；`<会话>` = 认证站会话 Cookie；`<client>` / `<白名单URI>` / `type` = 从前端 bundle 里 grep `oauth/authorize` 与 `unifiedLogin` 的调用点获取（本次为 `client_id=sport_membership_integration`、`type=2`、`redirect_uri` 为 H5 首页地址）。
+> **占位符**：`<auth域>` = 统一认证域名；`<target>` = 业务系统域名；`<会话>` = 认证站会话 Cookie；`<client>` / `<白名单URI>` / `type` = 从前端 bundle 里 grep `oauth/authorize` 与 `unifiedLogin` 的调用点获取（本次 `type=2`、`redirect_uri` 为 H5 首页地址；`client_id` 为厂商自定义命名，**不落档**——按目标现场取值，不要照抄其他项目）。
 
 ### 7.2 单账号单会话（凭据互踢）
 
@@ -278,7 +298,7 @@ curl -sk -X POST ".../mobile/shop/user/edit" -H "X-Access-Token: <token>" \
 | 5 | 从审计日志的 `method` 字段可反向聚合控制器类名（**只覆盖打了日志注解的操作，不完整**） |
 | 6 | **结论有时效性** —— 本次 WAF 规则在测试期间被实时收紧（同一扩展名 10 分钟内变了三次），**每条结论都要记录快照时间** |
 
-> 通用自检方法论（5 轮固定框架、六条核心教训、交付前全量复现验证）见 `references/notes/self-check-methodology.md`。
+> 通用自检方法论（5 轮固定框架、六条核心教训、交付前全量复现验证）见 `self-check-methodology.md`。
 
 ---
 
