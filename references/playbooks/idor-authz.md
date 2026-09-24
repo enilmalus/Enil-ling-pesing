@@ -133,7 +133,7 @@ POST /api/register
 | 防护 | 绕过 |
 |---|---|
 | UUID 不可枚举 | 从 JS/响应/通知邮件/webhook/GraphQL 里 harvest UUID 再重放 |
-| 哈希/间接引用 | `echo "dXNlcl8xMjM0NQ==" | base64 -d` → `user_12345`，改后重编码 |
+| 哈希/间接引用 | `echo "dXNlcl8xMjM0NQ==" \| base64 -d` → `user_12345`，改后重编码 |
 | 数字 ID 顺序 | ±1 / ±100 枚举，用 ffuf/Intruder |
 | 只挡 GET | 换 POST/PUT/PATCH/DELETE 同路径 |
 | 只挡 `/v3/` | 试 `/v1/` `/v2/` 旧版本（鉴权常是版本特定的）|

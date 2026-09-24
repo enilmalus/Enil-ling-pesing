@@ -51,7 +51,7 @@ user-invocable: true
 |---|---|
 | 子域/证书 | crt.sh、Censys、证书透明度日志 |
 | 历史快照 | Wayback Machine、CommonCrawl、URLScan.io |
-| 代码泄露 | GitHub/码云 dork：`org:target` + `password|api_key|SECRET|.env`；Google hacking |
+| 代码泄露 | GitHub/码云 dork：`org:target` + `password\|api_key\|SECRET\|.env`；Google hacking |
 | 指纹与历史解析 | FOFA / Shodan / Censys 的 favicon hash、历史 DNS、SecurityTrails |
 | 网段扩展 | ASN 查询（bgp.he.net）、DNS 区域传送（仅测试环境） |
 | 邮箱与泄漏 | Hunter.io、已公开 breach 数据（仅核验，不主动抓取新数据） |

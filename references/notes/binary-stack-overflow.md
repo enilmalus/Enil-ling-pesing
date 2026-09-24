@@ -40,8 +40,8 @@ RELRO     : Partial
 readelf -W -l /bin/dartVader | grep GNU_STACK
   GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RW  0x10
 scanelf -e dartVader
- TYPE   STK/REL/PTL FILE 
-ET_EXEC RW- R-- RW- dartVader 
+ TYPE   STK/REL/PTL FILE
+ET_EXEC RW- R-- RW- dartVader
 ```
 
 GNU_STACK 权限 `RW` 无 `X` = 栈不可执行（NX/DEP 生效）→ shellcode 注入路径当场否掉；scanelf 三列 STK/REL/PTL = `RW-`/`R--`/`RW-`，类型 `ET_EXEC`（非 PIE）与 checksec 的 PIE disabled 互证。
