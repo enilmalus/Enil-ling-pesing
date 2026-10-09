@@ -143,6 +143,8 @@ user-invocable: true
 
 **命中帝国 EmpireCMS 时**（`/e/` 目录结构、`e/admin/ecmsadmin.php`、后台登录失败文案「您的用户名、密码或安全答案有误」、cookie 前缀 + `auth` 后缀命名）→ Read `references/notes/empirecms-cms.md`：开源 stock 源码白盒对照法（负向结论源码一次排除）、全局密钥 cookie 离线重算验证（ckrndtwo/ecookiernd 双密钥、伪造链排除/升级判定）、stock 负向审计锚点表（RepPostVar2/int 强转/ENT_QUOTES 转义，勿重复实测）、高命中面清单（登录爆破/注册仿冒/Referer 植入与 ecmsfrom 双向量重定向/无审核留言板/后台目录静态文件）、功能模块开关矩阵、全功能点核对自检法、内容型写入测试痕迹纪律。
 
+**被入侵事件溯源时**（客户诉求是「被恶意注册/被入侵，帮定位漏洞」、攻击者产物仍在服务器上、但客户给的日志不覆盖攻击入口）→ Read `references/notes/ssti-cms-incident-traceback.md`：**畸形请求体探测法画鉴权分层图**（过滤器链先于消息解析 → 401=有鉴权 / 业务错误=无鉴权；query 参数型接口需单独修正；**用业务错误文案而非 HTTP 状态码做判据**）、从裸奔读接口拉全量业务表反查攻击者产物（攻击语义命名 / 深夜时段 / 异常字段）、**生成页运行时对象泄漏指纹**（`java.lang.UNIXProcess@`=命令已执行，`ProcessBuilder@`=仅求值未执行）、**路径回显 + 公开静态目录 = payload 原件下载**、SSTI 双引擎（Thymeleaf `T()` 需 SpringEL / FreeMarker `?new()`）与字符串拼接+反射绕过、**cmd-file 轮询型后门**识别与「先 pkill 后 rm」处置顺序、溯源边界（能定位 C2 归属、不能定位攻击者真实 IP）。
+
 **目标为 AD 域内网环境时**（88/389/445/464 端口簇、DC 主机名/NETBIOS 域、域格式凭据 user@domain，或 Web 立足后发现域特征）→ Read `references/notes/ad-initial-access.md`：Kerberos 机制速览、零凭据匿名枚举（SMB/RPC/LDAP）、用户名构造与喷洒、文档情报（PDF/xlsx/图片）、AS-REP Roast/Kerberoasting、Web→AD 凭据滚雪球、时钟偏差处理、Kerberos-only（NTLM 全禁）环境适配。已获域凭据或域内 shell → Read `references/notes/ad-post-compromise.md`：**Kerberos-only 通用纪律（PAC 时序/状态还原/BH 边过期/工具实名/NTLM 报错三态）**、BloodHound 侦察、凭据/哈希获取（pypykatz/Responder/强制认证三向量/LAPS/DPAPI）、ACL 滥用（ForceChangePassword/RBCD/DCSync/**owneredit→dacledit→bloodyAD 接管链**）、**Shadow Credentials（msDS-KeyCredentialLink，免爆破拿身份+NT hash）**、ADCS ESC1、SeBackup→ntds.dit、**KrbRelay（LDAP 中继机器账户入 Administrators，含跨会话抓 NTLM 与从源码自建配方）**、域内隧道、服务凭据离线解密。
 
 **靶场/CTF 二进制栈溢出题目时**（nc 直连二进制服务、需要本地分析可执行文件）→ Read `references/notes/binary-stack-overflow.md`：checksec 防护判定、offset 确定、ret2libc 全链。

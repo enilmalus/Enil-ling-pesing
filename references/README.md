@@ -59,6 +59,7 @@ references/
     ├── dotnet-client-re.md        # .NET 客户端逆向（dnSpy 定位后门/还原私有协议/反序列化前置）
     ├── windows-hardened-execution.md # Windows 执行受限主机（AppLocker/按程序拦出站/周期还原）：宿主内执行·DLL 劫持·代码签名证书滥用·DCSync-from-Windows（HTB-Hathor 实战沉淀）
     ├── field-ops-toolbox.md      # 实战工具箱（shell 稳定/传文件含批量投递/反弹矩阵/爆破与凭据破解/嗅探）
+    ├── ssti-cms-incident-traceback.md # 模板注入型入侵溯源（畸形请求体探鉴权分层/未鉴权面反查攻击者产物/UNIXProcess 指纹/路径回显+公开静态目录下载 payload 原件/cmd-file 轮询后门/处置顺序）
     └── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
 ```
 
