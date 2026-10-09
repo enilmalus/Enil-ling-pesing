@@ -1,6 +1,8 @@
 # 模板注入型入侵溯源方法论：从一份访问日志到完整攻击链（2026-10 实战沉淀）
 
-> 来源：某行业协会官网（生产）被入侵事件的授权溯源。客户诉求是「后台被恶意注册了账号，帮定位漏洞」，实际挖出的是**推送模板 SSTI → root RCE + 持久化后门**。域名、IP、账号、口令、C2 地址均已脱敏。命中「**CMS 模板/主题/推送类功能 + 攻击者产物仍在服务器上**」时按 §0–§13 过一遍。
+> 来源：某行业协会官网（生产）被入侵事件的授权溯源。客户诉求是「后台被恶意注册了账号，帮定位漏洞」，实际挖出的是**推送模板 SSTI → root RCE + 持久化后门**。域名、IP、账号、口令、C2 地址均已脱敏。命中「**CMS 模板/主题/推送类功能 + 攻击者产物仍在服务器上**」时按 §0–§14 过一遍。
+>
+> **仅限授权测试**：§8 的 payload 与绕过手法属 SKILL.md Phase 4「可执行代码」授权项——本文件里它们的用途是**解释攻击者留下的产物**，不是拿去打未授权目标；§3 的鉴权分层普查与 §11 的处置动作须在授权范围与客户知晓下进行。
 
 **核心思路**：目标是**已经被打过、且攻击者产物还没被清理**的生产站点时，**不要只从日志正查**。
 
@@ -101,7 +103,9 @@ curl -s https://<目标>/<spa-path>/ -o index.html
 | 路径绕过 | `/path/`、`//path`、`/./path`、`/../path`、`/path%20`、`/path;.js`、`/path.json`、大小写、`/path%2f` |
 | 认证头绕过 | 空值、`null`、`undefined`、`0`、`1`、`true`、`admin`、`test`、`'`、`-1` |
 
-**实测结论**：目标的管理前缀（`/api/system/**`、`/api/schedule/**`）**十余种路径变体 + 十余种认证头变体全部被挡**——说明该层保护是认真的，**不要在这上面耗时间**，把精力放到裸奔的前缀上。
+**实测结论**：目标的管理前缀（`/api/system/**`、`/api/schedule/**`）**近十种路径变体 + 十种认证头变体全部被挡**——说明该层保护是认真的，**不要在这上面耗时间**，把精力放到裸奔的前缀上。
+
+> **噪声纪律**：路径/认证头变体批量发包会在客户生产日志里留下成片 401。动手前跟客户报备测试时段与出口 IP，手工逐条发、不挂扫描器、不并发——否则会产生新的"看不懂的异常"，反过来污染你正在做的溯源。
 
 ---
 
@@ -151,7 +155,7 @@ curl -s "https://<目标>/api/<module>/listPage?current=1&size=2000" \
 
 | 语言/引擎 | 运行时对象泄漏指纹 |
 |---|---|
-| Java | `java.lang.UNIXProcess@<hash>`（JDK8）、`java.lang.ProcessImpl@<hash>`（JDK9+） |
+| Java | `java.lang.UNIXProcess@<hash>`（Unix/Linux + JDK8）、`java.lang.ProcessImpl@<hash>`（Windows JDK8 及 JDK9+ 全平台） |
 | Java | `java.lang.ProcessBuilder@<hash>` ⚠️ 见下方说明 |
 | Python | `<subprocess.Popen object at 0x...>` |
 | PHP | `object(Closure)#1 (0) {}`、`resource(5) of type (stream)` |
@@ -221,9 +225,13 @@ WAF / 输入过滤常拦 `T(`、`Runtime`、`ProcessBuilder`。绕过手法（�
 ${code.getClass().forName('java.lang.Process'+'Builder')
    .getConstructors()[0].newInstance({'sh','-c','...'}).start()}
 
-<!-- 更狠：用 getDeclaredMethods()[N] 拿方法，连方法名都不出现 -->
-${code.getClass().forName('java.lang.Runtime').getDeclaredMethods()[7].invoke(null).exec('...')}
+<!-- 更狠：类名拆开写，连 getRuntime 也靠下标取出来 -->
+${code.getClass().forName('java.lang.Run'+'time').getDeclaredMethods()[N].invoke(null).exec('...')}
 ```
+
+> ⚠️ 第二条别照抄当"可用 payload"，它有两个坑：
+> - **下标未定义且随 JDK 版本浮动**——`invoke(null)` 只有在取到**静态无参**方法（`getRuntime()`）时才成立，取到实例方法（`exec`/`gc` 之类）直接 NPE。要可复现，改用带显式接收者的写法：`...getMethod("exec",T(String)).invoke(T(Runtime).getRuntime(),"id")`（见 `playbooks/ssti.md` §4.7）。
+> - **类名字面量必须一起拆**——上面 `ProcessBuilder` 拆了，`Runtime` 也要拆成 `'java.lang.Run'+'time'`；只拆一半，遇到按子串拦 `Runtime` 的过滤器照样被挡。
 
 **启示**：**任何基于关键字黑名单的防护都靠不住**——攻击者用字符串拼接就绕过了。修复必须落在"不让用户内容进模板引擎"，而不是"过滤危险字符"。
 
@@ -261,6 +269,8 @@ while true; do
 done
 ```
 
+> 样本里的两个细节别"顺手改好"：`[ -n "$CUR" ]` 恒真（`md5sum` 对不存在的文件也输出哈希）加上 `LAST` 初值为空 → **首轮必然空执行一次**；`.bdrunning` 的「先查后 touch」也有竞态。这类不完美恰好是**指纹**——排查时按原始样本的形状去找（进程活着但命令文件已删、仍在轮询），不要按"理想脚本"去匹配。
+
 **为什么攻击者爱用**：
 
 | 优点 | 说明 |
@@ -272,7 +282,7 @@ done
 **排查要点**：
 
 ```bash
-# 1) 谁在跑该目录下的东西（比 grep 可靠）
+# 1) 谁在跑该目录下的东西（比 grep 可靠；非 root 读不到他人进程的 exe/cwd，要 sudo）
 ls -l /proc/*/exe 2>/dev/null | grep '/opt/<app>/file'
 ls -l /proc/*/cwd 2>/dev/null | grep '/opt/<app>/file'
 
@@ -325,8 +335,8 @@ ls -la /opt/<app>/file/ | grep -E 'cmd\.txt|out\.txt|bdrunning|\.sh$'
 
 | 面 | 结论 |
 |---|---|
-| 管理前缀路径绕过（十余种变体） | 全部 401，**排除** |
-| 认证头绕过（十余种变体） | 全部 401，**排除** |
+| 管理前缀路径绕过（近十种变体） | 全部 401，**排除** |
+| 认证头绕过（十种变体） | 全部 401，**排除** |
 | 登录接口 SQL 注入 | `'`、`'-- `、`' or '1'='1` 返回**完全一致** → 参数化，**排除** |
 | 隐藏注册接口 | 404，**排除** |
 | 前台注册页 | HTML 里已注释下线（但对应 API 仍无鉴权——**页面下线 ≠ 接口下线**） |
@@ -345,7 +355,7 @@ ls -la /opt/<app>/file/ | grep -E 'cmd\.txt|out\.txt|bdrunning|\.sh$'
 □ 前端 JS 逆向 → API 路由 + baseURL + 认证头 + 路由 meta.title
 □ 畸形请求体探测 → 鉴权分层图（用业务错误文案判定，不看状态码）
 □ query 参数型接口单独修正判定
-□ 路径绕过 + 认证头绕过（各十余种变体）
+□ 路径绕过 + 认证头绕过（各近十种变体）
 □ 接口文档泄露：/v2/api-docs、/swagger-ui.html、/actuator/*
 
 【反查攻击者产物】
@@ -378,3 +388,15 @@ ls -la /opt/<app>/file/ | grep -E 'cmd\.txt|out\.txt|bdrunning|\.sh$'
 ## 14. 一句话总结
 
 > **被入侵过的站点，攻击者的产物往往比日志更完整。** 先用畸形请求体探测画出鉴权分层图，从裸奔的读接口拉全量数据找异常记录，顺着记录的 `url` 字段下载生成页看有没有运行时对象泄漏，再顺着路径回显推导公开静态目录映射——**payload 原件、命令输出、后门脚本就全在公网挂着**。这条路的完整度和速度都远胜于查日志。
+
+---
+
+## 附：与兄弟产物的分工
+
+| 场景 | 去哪 |
+|---|---|
+| 只是发现模板渲染点、要做常规 SSTI 探测与 payload 取用 | `playbooks/ssti.md`（§4.3 引擎 payload / §4.7 关键字绕过）——本 note §8 只负责"**解释攻击者留下了什么**"，不是 payload 主库 |
+| Swagger / Druid / Actuator / Nacos 这类未授权面本身的系统性普查 | `playbooks/unauth-access.md` §2.3 |
+| `.git`/`.env`/备份文件/JS 密钥等文件级信息泄露 | `playbooks/info-disclosure.md` §2 |
+| 报告初稿写完后的自查与结论边界（本 note §10 的"不能定位什么"要落到报告里） | `notes/self-check-methodology.md` §1、§4 |
+| 已经拿到 shell，要做传输 / 稳定化 / 后门与持久化排查 | `notes/field-ops-toolbox.md` §1、§4 |

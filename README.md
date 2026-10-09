@@ -37,7 +37,7 @@ Triggers when any of the following matches:
 ├── SKILL.md               # Main workflow: phases + routing table + hard constraints
 └── references/
     ├── playbooks/         # 28 vulnerability playbooks
-    ├── notes/             # Field methodology notes (AD, privesc, .NET client RE, toolbox, binary pwn)
+    ├── notes/             # Field methodology notes (AD, privesc, China CMS/authz, incident traceback, .NET client RE, toolbox, binary pwn)
     ├── dictionaries/      # China fingerprints / default credentials / parameters
     └── templates/         # Report / state-tracking templates
 ```

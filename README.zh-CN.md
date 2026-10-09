@@ -37,7 +37,7 @@ ln -s "$(pwd)/Enil-ling-pesing" ~/.claude/skills/enil-ling-pesing
 ├── SKILL.md               # 主流程：六阶段 + 路由表 + 硬约束
 └── references/
     ├── playbooks/         # 28 类漏洞 playbook
-    ├── notes/             # 实战方法论笔记（AD 域、提权、.NET 客户端逆向、工具箱、二进制）
+    ├── notes/             # 实战方法论笔记（AD 域、提权、国产 CMS 与管理端越权、入侵溯源、.NET 客户端逆向、工具箱、二进制）
     ├── dictionaries/      # 国产指纹 / 默认凭据 / 高频参数
     └── templates/         # 报告 / 状态外化模板
 ```
