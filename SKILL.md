@@ -126,6 +126,8 @@ user-invocable: true
 | Windows .NET 客户端 exe/dll（内网工具、随共享分发） | `references/notes/dotnet-client-re.md` |
 | Windows 主机执行受限（落地 exe 被 AppLocker 拦 / 防火墙按程序拦出站 / PowerShell 受限语言模式） | `references/notes/windows-hardened-execution.md` |
 | 目标目录/文件被周期性还原（放进去的暂存文件与已改脚本会自己变回原样） | `references/notes/windows-hardened-execution.md` §6 |
+| 源码里出现**手动 `session_id()`** / 自写会话生成函数（`makesession` 类）/ **硬编码 JWT·HMAC 密钥**，且手上已有任意文件读 | `references/notes/selfmade-session-and-token-forging.md` |
+| Windows + Apache/PHP（XAMPP 类）已拿到 webshell，要继续横向或提权 | `references/notes/windows-webapp-foothold-to-local-admin.md` |
 
 **工具与自动化**：手工确认后可用 `sqlmap`、`nuclei`、`ffuf` 扩大覆盖面；任何自动工具输出仍需手工复核证据。
 

@@ -60,7 +60,9 @@ references/
     ├── windows-hardened-execution.md # Windows 执行受限主机（AppLocker/按程序拦出站/周期还原）：宿主内执行·DLL 劫持·代码签名证书滥用·DCSync-from-Windows（HTB-Hathor 实战沉淀）
     ├── field-ops-toolbox.md      # 实战工具箱（shell 稳定/传文件含批量投递/反弹矩阵/爆破与凭据破解/嗅探）
     ├── ssti-cms-incident-traceback.md # 模板注入型入侵溯源（畸形请求体探鉴权分层/未鉴权面反查攻击者产物/UNIXProcess 指纹/路径回显+公开静态目录下载 payload 原件/cmd-file 轮询后门/处置顺序）
-    └── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
+    ├── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
+    ├── selfmade-session-and-token-forging.md # 应用自造会话/令牌 → 无密码身份伪造（源码判据 / 会话 ID 枚举与会话文件读写 / JWT 自签与 HMAC key 编码陷阱 / 凭据猎取顺序）[HTB-Breadcrumbs 沉淀]
+    └── windows-webapp-foothold-to-local-admin.md # Windows+Apache/PHP 从 webshell 到本机管理员（先凭据后提权 / 本地监听与伪装服务识别 / 服务劫持的最后一公里 / UWP 数据定位 / SQLite WAL 三件套 / 杀软拦 payload 的对照定位与混淆绕过 / 判读纪律）[HTB-Breadcrumbs 沉淀]
 ```
 
 ## 每个 playbook 的统一结构
