@@ -7,13 +7,16 @@
 ```
 references/
 ├── README.md                      # 本文件
-├── playbooks/                     # 逐类漏洞 playbook（✅ 已建齐 28 个）
+├── playbooks/                     # 逐类漏洞 playbook（✅ 已建齐 31 个）
 │   ├── _template.md               # 作者模板（非路由目标，写新 playbook 时参考）
 │   ├── sqli.md                    # P0/P1 深挖
 │   ├── xss.md
 │   ├── ssrf.md
 │   ├── idor-authz.md
 │   ├── file-upload.md
+│   ├── mass-assignment.md         # 批量赋值/过度绑定（非 REST/GraphQL 的通用场景；REST 见 api-testing §4.2）
+│   ├── encoding-charset-boundary.md # 解析与规范化差异（分层判定方法；编码变换清单见 waf-bypass §4.1）
+│   ├── pre-auth-surface.md        # 认证前可达面清点方法（服务清单见 unauth-access）
 │   ├── csv-excel-injection.md     # CSV/Excel 公式注入（导出功能）[PayloadsAllTheThings]
 │   ├── websocket.md               # WebSocket 测试 + CSWSH [PayloadsAllTheThings]
 │   ├── prototype-pollution.md     # 原型污染 CSPP/SSPP/gadget [PayloadsAllTheThings]
@@ -43,14 +46,14 @@ references/
 │   └── default-credentials-cn.md
 ├── templates/
 │   ├── report-template.md         # Phase 5 报告模板（md 骨架，含 WSTG 覆盖声明 + 提交前验证门）
-│   └── state-tracking.md           # 长任务状态外化模板（Phase 2 起落盘，每阶段收尾更新）
+│   └── state-tracking.md           # 长任务状态外化模板（Phase 2 起落盘，每产生一个结论/一次阻塞即追加）
 └── notes/                         # 实战方法论、研究蒸馏与自研绕过技巧（实战类均数据脱敏）
     ├── mftcc-vue-microfrontend.md # 微前端+微服务网关架构方法论（某保理平台两轮实战沉淀）
     ├── empirecms-cms.md          # 帝国 EmpireCMS 方法论（stock 源码白盒对照/cookie 伪造链/负向锚点/痕迹纪律）
     ├── multi-target-orchestration.md # 多子域/多站点并行编排（聚类→分治→交叉回归→矩阵报告）
     ├── qiyuesuo-cms-storage.md   # 契约锁/电子签平台+官网CMS链+对象存储+DLP交付（三轮实战沉淀）
     ├── jeecg-boot.md             # JeecgBoot（含定制版）管理端越权方法论（/sys 读写分开普查、GET 探 405 判可达、任意表/列读取、上传功能越权、定时任务「能入库≠能执行」的源码核对法、审计日志二次挖掘）
-    ├── self-check-methodology.md # 收尾自检方法论（报告初稿后必跑的 5 轮框架 + 六条核心教训 + 自检自身的纪律（含结论不得超出证据边界）+ 交付前全量复现验证）
+    ├── self-check-methodology.md # 收尾自检方法论（报告初稿后必跑的 5 轮框架 + 六条核心教训 + 自检自身的纪律（含结论不得超出证据边界）+ 交付前全量复现验证（复测三态 reproduced/fixed/inconclusive））
     ├── methodology-standards-map.md # PTES/WSTG/NIST 800-115/OSSTMM/ATT&CK 对齐映射 + WSTG 12 类查漏表
     ├── llm-agent-pentest-research.md # LLM 渗透代理论文蒸馏（PentestGPT/EnIGMA/Cybench 等→操作纪律）
     ├── ad-initial-access.md       # AD 域渗透·初始访问（博客 HTB writeup 系列沉淀：零凭据→域内立足）
@@ -72,7 +75,7 @@ references/
 2. **探测顺序**：从最无害到最有杀伤力的步骤
 3. **payload 区**：每条 payload 必须标注出处（如 `SecLists/...`、`PayloadsAllTheThings/...`、具体 URL）；无出处不允许写入
 4. **工具用法**：sqlmap/nuclei/ffuf 等的精确命令与参数
-5. **证据要求**：什么才算"已确认"（必须能保存什么）
+5. **证据要求**：什么才算"已确认"（必须能保存什么）；含**证据三件套** `baseline`（正常对照）/ `proof`（触发包）/ `verification`（独立二次触发）——缺 baseline 只能算候选
 
 ## 未建文件时的兜底
 
