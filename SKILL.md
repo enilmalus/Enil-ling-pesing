@@ -128,6 +128,7 @@ user-invocable: true
 | 目标目录/文件被周期性还原（放进去的暂存文件与已改脚本会自己变回原样） | `references/notes/windows-hardened-execution.md` §6 |
 | 源码里出现**手动 `session_id()`** / 自写会话生成函数（`makesession` 类）/ **硬编码 JWT·HMAC 密钥**，且手上已有任意文件读 | `references/notes/selfmade-session-and-token-forging.md` |
 | Windows + Apache/PHP（XAMPP 类）已拿到 webshell，要继续横向或提权 | `references/notes/windows-webapp-foothold-to-local-admin.md` |
+| Windows + **IIS/PHP + MySQL/MariaDB** 站点：注入点能往磁盘写文件（报错型 SQLi / `INTO OUTFILE` / `secure_file_priv`），或已落到 `IUSR` 这类低权账号要继续提权 | `references/notes/windows-iis-sqli-to-system.md` |
 
 **工具与自动化**：手工确认后可用 `sqlmap`、`nuclei`、`ffuf` 扩大覆盖面；任何自动工具输出仍需手工复核证据。
 
@@ -166,6 +167,7 @@ user-invocable: true
 - 提权路径评估 → 枚举层（只读检查）默认可做，如实报告「存在提权路径」；实际利用属「可提权」授权项，授权明确允许时按 `references/notes/privesc-linux-windows.md` 决策树执行，无授权止步于路径存在证明
 - shell 后实操（传文件/升级 shell/凭据爆破验证/快捕流量）→ `references/notes/field-ops-toolbox.md`（工具矩阵 + 速率纪律 + 授权门禁）
 - 立足点是**执行受限主机**（AppLocker 拦未签名 exe / 防火墙按程序拦出站 / 落地文件被周期性还原）→ `references/notes/windows-hardened-execution.md`（宿主内执行、DLL 劫持、代码签名证书重签高权脚本、周期还原下的作战纪律）
+- 立足点是 **Windows + IIS 低权账号**（`IUSR` / 应用池身份），要继续本机提权 → `references/notes/windows-iis-sqli-to-system.md`（Potato 家族的**环境归因三查**、服务注册表 ACL → ImagePath 劫持的「写键 / 启服务」分工、`sc` 返回码判读、换身份的 loopback WinRM 与用户名前缀坑）
 
 ---
 

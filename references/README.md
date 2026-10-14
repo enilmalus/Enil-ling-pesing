@@ -62,7 +62,8 @@ references/
     ├── ssti-cms-incident-traceback.md # 模板注入型入侵溯源（畸形请求体探鉴权分层/未鉴权面反查攻击者产物/UNIXProcess 指纹/路径回显+公开静态目录下载 payload 原件/cmd-file 轮询后门/处置顺序）
     ├── binary-stack-overflow.md   # 二进制栈溢出基础（checksec→offset→ret2libc，CTF/靶场向）
     ├── selfmade-session-and-token-forging.md # 应用自造会话/令牌 → 无密码身份伪造（源码判据 / 会话 ID 枚举与会话文件读写 / JWT 自签与 HMAC key 编码陷阱 / 凭据猎取顺序）[HTB-Breadcrumbs 沉淀]
-    └── windows-webapp-foothold-to-local-admin.md # Windows+Apache/PHP 从 webshell 到本机管理员（先凭据后提权 / 本地监听与伪装服务识别 / 服务劫持的最后一公里 / UWP 数据定位 / SQLite WAL 三件套 / 杀软拦 payload 的对照定位与混淆绕过 / 判读纪律）[HTB-Breadcrumbs 沉淀]
+    ├── windows-webapp-foothold-to-local-admin.md # Windows+Apache/PHP 从 webshell 到本机管理员（先凭据后提权 / 本地监听与伪装服务识别 / 服务劫持的最后一公里 / UWP 数据定位 / SQLite WAL 三件套 / 杀软拦 payload 的对照定位与混淆绕过 / 判读纪律）[HTB-Breadcrumbs 沉淀]
+    └── windows-iis-sqli-to-system.md # Windows+IIS/PHP+MariaDB：SQLi 写文件落 webshell 与服务注册表 ACL→ImagePath 劫持提权（LOAD_FILE 读能力校准 / MariaDB 与 MySQL 的 secure_file_priv 语义相反 / IFNULL 十六进制替身 / 「页面报错≠动作失败」判读 / Potato 家族环境归因三查 / 服务上下文只跑 cmd 内建的对照判据 / loopback WinRM 用户名前缀坑）[HTB-Control 沉淀]
 ```
 
 ## 每个 playbook 的统一结构
