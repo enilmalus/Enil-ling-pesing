@@ -49,6 +49,8 @@
 /ckfinder/userfiles/files/
 ```
 
+> **UEditor 单独成篇** → `../notes/ueditor-components.md`：除上传外，它的 `listfile`/`listimage`（目录枚举 → 内部文档泄露）、`catchimage`（SSRF）同样**无需认证** —— 只测 `upload*` 会系统性漏掉这两类。
+
 **后端类型快表** `[本地 src-hunter]`：`.php/.phtml/.phar` → PHP；`.jsp/.jspx` → Tomcat；`.asp/.aspx/.cer` → IIS/ASP.NET；`.htaccess`（Apache 改解析规则）/`web.config`（IIS）本身也是攻击载荷。
 
 ## 3. 探测顺序（从最无害 → 最有杀伤力）

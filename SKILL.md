@@ -143,6 +143,8 @@ user-invocable: true
 | 目标为云资产（S3/存储桶/K8s） | `references/playbooks/cloud.md` |
 | 未授权服务（Redis/Mongo/ES/Actuator/Swagger/默认端口） | `references/playbooks/unauth-access.md` |
 | `.git`/`.env`/备份文件/phpinfo/JS 密钥泄露 | `references/playbooks/info-disclosure.md` |
+| 站点用 **UEditor 富文本**（`/ueditor/` `/ue/` 目录、`?action=config` 返回 JSON、JS 里有 `UE.version`） | `references/notes/ueditor-components.md`（**免登录接口四连**：config 配置泄露 / listfile·listimage 目录枚举→内部文档泄露 / catchimage SSRF / upload* 未授权上传；含**本次未找到 RCE 路径**的源码级实测结论与扩展名白名单） |
+| 字面特殊字符被转义/被拦，**换 HTML 实体形式就生效** | `references/playbooks/encoding-charset-boundary.md` §4.4（转义/解码顺序颠倒；注入类负向结论必须覆盖实体形式） |
 | 文件路径入参 / `../` / 静态资源读取 | `references/playbooks/path-traversal.md` |
 | 跨站请求（令牌缺失）/ 重定向参数 | `references/playbooks/csrf-open-redirect.md` |
 | CORS 响应头 / Host 头注入 / 缓存投毒 | `references/playbooks/cors-host-header.md` |

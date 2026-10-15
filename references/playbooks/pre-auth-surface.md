@@ -8,7 +8,7 @@
 - 具体未授权服务清单（Redis/ES/Actuator 默认口等）→ `unauth-access.md`
 - 信息泄露类利用与评级 → `info-disclosure.md`；REST 接口的越权/字段级问题 → `api-testing.md`
 - 框架自带管理面的反向枚举教训 → `../notes/self-check-methodology.md` §3.1
-- **payload 出处**：路径/探针取自本地 clone 的取材源（`Work/Tools/src-hunter-skill`、`Work/Tools/PayloadsAllTheThings`）与本 skill 既有 playbook，逐条标注出处；**未标出处的一律不写入**（SKILL.md 硬约束 1）。
+- **payload 出处**：路径/探针取自 [MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill) 与本 skill 既有 playbook，逐条标注出处；**未标出处的一律不写入**（SKILL.md 硬约束 1）。
 
 ---
 
@@ -19,13 +19,15 @@
 - 同 IP 多端口/多 Host、存在预发或测试域名
 - 已拿到任意一个接口的 401/403 语义差异（说明鉴权是"逐接口"而非"入口统一"）
 
-## 2. 路由来源（三路，缺一路必漏）
+## 2. 高频入口点（路由来源三路，缺一路必漏）
 
 | 来源 | 做法 |
 |---|---|
 | **前端资产** | 抓全部 JS chunk（webpack/vite 产物）→ 提取路由表、`baseURL`/API 前缀、被注释或未挂菜单的模块名；微前端见 `../notes/mftcc-vue-microfrontend.md` |
 | **服务端差异** | 对比 404 页面/错误体在不同前缀下的差异；探测常见运维前缀；对疑似存在用 **GET 探 405** 判可达（`../notes/self-check-methodology.md` §3.5） |
 | **旁路情报** | 证书透明度/历史快照/备份文件/`.well-known`/robots/sitemap；同源预发域名（同 IP 不同 Host） |
+
+> **第三方组件的自带接口是免登录面的大户**（编辑器/上传/导出/预览类组件常整目录无鉴权）：**UEditor** → `../notes/ueditor-components.md`（config/listfile/listimage/catchimage/upload* 全部免登录）；同类还有 FCKeditor / eWebEditor / KindEditor / CKFinder，路径速查见 `file-upload.md` §2「编辑器测试路径速查」。
 
 ## 3. 探测顺序（从最无害 → 最有杀伤力）
 
@@ -41,11 +43,11 @@
 
 **4.1 免登录高命中路径与探针** `[本地 src-hunter unauth-access.md]`
 
-- **关键 path 表**（基于 WooYun 案例统计的高命中表）→ `Work/Tools/src-hunter-skill/references/playbooks/unauth-access.md` §3.3
+- **关键 path 表**（基于 WooYun 案例统计的高命中表）→ [MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill) 的 `references/playbooks/unauth-access.md` §3.3
 - 服务级指纹一行命令与单服务一键探针（Redis / Mongo / ES / Docker / rsync / Memcached / ZooKeeper / Spring Actuator）→ 同文件 §3.1–§3.2
 - 默认凭据枚举纪律（**必须限速**，同文件已给速率上限）→ 同文件 §3.4
 
-> 出处：`src-hunter-skill`（本地 clone `Work/Tools/src-hunter-skill`）。本 skill 的等价内容：`unauth-access.md` §2.2–§2.4、§4.1–§4.2（不重复维护）。
+> 出处：[MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill) `references/playbooks/unauth-access.md`（**上游仓库的**，勿与本 skill 同名的 `references/playbooks/unauth-access.md` 混淆）。本 skill 的等价内容：本目录 `unauth-access.md` §2.2–§2.4、§4.1–§4.2（不重复维护）。
 
 **4.2 前端路由 / 接口前缀提取** `[本 skill 自研]`
 

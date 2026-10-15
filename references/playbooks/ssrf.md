@@ -12,6 +12,7 @@
 - 参数名命中 `url`/`callback`/`return`/`redirect`/`feed`/`image`/`proxy`/`source` 等。
 - 响应里回显了目标 URL 的内容、或服务端 User-Agent 是 `wkhtmltopdf`/`Headless Chrome`/`Java/1.x`（渲染器/HTTP 客户端指纹）`[本地 src-hunter]`。
 - 响应头泄露内网主机名：`Via: 1.1 internal-proxy`、`X-Cache` 命中内网 host、`Server: internal-service` `[Claude-BugHunter]`。
+- **富文本编辑器的远程图片抓取**（UEditor `?action=catchimage&source[]=`、KindEditor、FCKeditor 的 `GetFoldersAndFiles` 类）→ `../notes/ueditor-components.md` §4。这类入口**常免登录**，且**抓到的内容会落盘**，可当"内网读取器"用。
 
 > 关键区分：**服务器把 URL 回显进错误信息 ≠ SSRF**。`"The Web application at http://evil/x could not be found"` 只是字符串拼接，不是真的发起了出站请求。必须靠 OOB 回调确认 `[Claude-BugHunter]`。
 

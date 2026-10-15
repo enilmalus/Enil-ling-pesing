@@ -7,7 +7,7 @@
 - REST API 场景 → 先读 `api-testing.md` §4.2（Mass Assignment 专节，字段候选与出处见该节）
 - GraphQL mutation → 先读 `graphql.md`（mutation Mass Assignment）
 - 深合并 / `__proto__` 类属性注入 → `prototype-pollution.md`
-- **payload 出处**：payload 取自本地 clone 的取材源（`Work/Tools/PayloadsAllTheThings`、`Work/Tools/src-hunter-skill` 等），逐条标注出处；**未标出处的一律不写入**（SKILL.md 硬约束 1）。
+- **payload 出处**：payload 取自 [swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)、[MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill) 等权威公开源，逐条标注出处；**未标出处的一律不写入**（SKILL.md 硬约束 1）。
 
 ---
 
@@ -27,7 +27,7 @@
 ## 3. 探测顺序（从最无害 → 最有杀伤力）
 
 1. **建差分基线**：先发**最小字段集**的正常请求，记录响应与随后用读接口看到的状态（这一步就是报告要用的 `baseline`）。
-2. **逐字段追加**：每次只加一个候选字段，值取"可判定的安全值"（如 `false`/`0`/随机字符串，**不要**直接送 `admin`/`true` 做第一次尝试），比较响应与**服务端真实状态**。
+2. **逐字段追加**：每次只加一个候选字段，值取**能明确判定"被写入 / 被忽略"的值**——`admin`、`true`、`false`、`0`、随机字符串都可以；直接送 `admin`/`true` 正是为了让写入后的判权变化可判定（**前提是只用测试账号**，见 §7）。比较响应与**服务端真实状态**。
 3. **判定"真写进去了"**：必须用**独立读接口 / 重新登录后读**确认属性已持久化——**响应回显了该字段 ≠ 它被持久化**（回显可能来自原样返回给你的 body）。
 4. **确认影响面**：只有属性确实写入且影响判权/归属/金额时才算有效漏洞；仅"接受了未知字段但无用"→ 记为观察，**不写成漏洞**。
 5. **降级路径**：字段被忽略 → 试嵌套对象形态、`[]`/JSON 数组形态、大小写与下划线/驼峰变体（`isAdmin`/`is_admin`/`IS_ADMIN`）——这属于同一次探测内的**变体尝试**，不受"重跑一次"限制。
@@ -45,7 +45,7 @@
 }
 ```
 
-> 出处：`PayloadsAllTheThings/Mass Assignment/README.md`（本地 clone `Work/Tools/PayloadsAllTheThings`）。原文要点：ORM/框架自动把用户输入赋给对象属性且不校验可写字段 → `isAdmin` 被写入即提权。
+> 出处：[swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings) `Mass Assignment/README.md`。原文要点：ORM/框架自动把用户输入赋给对象属性且不校验可写字段 → `isAdmin` 被写入即提权。
 
 **4.2 场景化字段候选** `[本地 src-hunter api安全.md]`
 
@@ -55,7 +55,7 @@
 - 更新设置时加 `is_admin: true` → 拿管理权
 - 根因是框架自动绑定（Spring `@ModelAttribute` / Rails `attr_accessible` 语义 / Laravel `$fillable` / Django / Node ORM 直传 `req.body`）
 
-> 出处：`src-hunter-skill/references/payloader/by-category/web/api安全.md`（Mass Assignment 节，本地 clone `Work/Tools/src-hunter-skill`）；REST 场景的字段候选与绕过另见 `api-testing.md` §4.2、GraphQL mutation 见 `graphql.md`。
+> 出处：[MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill) `references/payloader/by-category/web/api安全.md`（Mass Assignment 节）；REST 场景的字段候选与绕过另见 `api-testing.md` §4.2、GraphQL mutation 见 `graphql.md`。
 
 **4.3 差分探测模板（本 skill 自研，不依赖具体字段名）**
 

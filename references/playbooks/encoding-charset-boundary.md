@@ -7,7 +7,7 @@
 - 本文件聚焦「**解析差异的观测方法与判据**」
 - **WAF 绕过类的编码变换清单不在此重复** → `waf-bypass.md` §4.1 编码层（分块、HPP、大小写、Content-Type 混淆等）
 - 路径穿越的利用面 → `path-traversal.md`；NoSQL/LDAP 的字符与类型差异 → `nosql.md`、`ldap-xpath-injection.md`；原型污染 → `prototype-pollution.md`
-- **payload 出处**：payload 取自本地 clone 的取材源（`Work/Tools/PayloadsAllTheThings`、`Work/Tools/src-hunter-skill` 等），逐条标注出处；**未标出处的一律不写入**（SKILL.md 硬约束 1）。
+- **payload 出处**：payload 取自 [swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)、[MyuriKanao/src-hunter-skill](https://github.com/MyuriKanao/src-hunter-skill) 等权威公开源，逐条标注出处；**未标出处的一律不写入**（SKILL.md 硬约束 1）。
 
 ---
 
@@ -17,6 +17,7 @@
 - 同一参数在不同接口/不同 Content-Type 下表现不同（JSON 接受、表单拒绝，或反之）
 - 路径类参数对 `..`、`/`、`\`、`;`、`%2e` 的处理在不同层不一致
 - 参数以数组/标量两种形态出现时行为不同（`a=1&a=2`、`a[]=1`、`{"a":["1"]}`）
+- **字面特殊字符被转义/被拦，但换成 HTML 实体形式（`&#39;` 等）就生效** → 转义与解码顺序颠倒（见 §4.4）
 
 ## 2. 高频入口点（观测维度，不是 payload 清单）
 
@@ -49,16 +50,16 @@
 | `＂` (U+FF02) | `＂ or ＂1＂=＂1` | `" or "1"="1` |
 | `﹣` (U+FE63) | `admin'﹣﹣` | `admin'--` |
 | `／` (U+FF0F) | `／／domain.com` | `//domain.com` |
-| `＜` (U+FF1C) | `＜img src=a＞` | `<img src=a/>` |
+| `＜` (U+FF1C) | `＜img src=a＞` | `<img src=a>` |
 | `﹛` (U+FE5B) | `﹛﹛3+3﹜﹜` | `{{3+3}}` |
 | `［` (U+FF3B) | `［［5+5］］` | `[[5+5]]` |
 | `＆` (U+FF06) | `＆＆whoami` | `&&whoami` |
 | `ｐ`+`ʰ` | `shell.ｐʰｐ` | `shell.php` |
 | `ª` (U+00AA) | `ªdmin` | `admin` |
-| `。` (U+3002) | `domain。com` | `domain.com` |
 
-> 出处：`PayloadsAllTheThings/Encoding Transformations/README.md`（Unicode Normalization 节，本地 clone `Work/Tools/PayloadsAllTheThings`）。
+> 出处：[swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings) `Encoding Transformations/README.md`（Unicode Normalization 节）。
 > **判据**：只有「某一层做了规范化/兼容映射（NFKC/NFKD 或应用层 `normalize()`）而另一层没做」时差异才可利用——先证分层，再用表里对应字符。
+> **本表右列已逐行用 `unicodedata.normalize('NFKC', …)` 复核**（自检代码见下）。**与上游原文共三处改动、涉及上游 4 行**：① 上游 `＜…＞` 一行右列写作 `<img src=a/>`，NFKC 实际结果是 `<img src=a>`（上游笔误），本表按实测订正；② 上游的 `。`(U+3002) 一行**不属于 Unicode 规范化**（NFKC 下不变），已移到 §4.2 的域名层等价映射；③ 上游把 `ｐ`(U+FF50) 与 `ʰ`(U+02B0) 列为两行（payload 与结果均相同），本表合并为一行。
 
 Python 侧自检规范化结果（确认哪一层会变）：
 
@@ -74,11 +75,60 @@ for form in ("NFC", "NFD", "NFKC", "NFKD"):
 
 - MySQL 中形近字符可能被判等：`SELECT 'a' = 'ᵃ'` 返回 `1`；带 `COLLATE utf8mb4_0900_as_cs` 时返回 `0`
 - Punycode / IDN 同形域名：`раypal.com`（西里尔字母 `а`）↔ `xn--ypal-43d9g.com`
+- **域名层等价映射**（属 IDNA/UTS-46，**不是 Unicode 规范化**）：`。`(U+3002)、`．`(U+FF0E)、`｡`(U+FF61) 在 IDN 处理中均映射为 `.`，故 `domain。com` 在支持 IDN 的解析器里等价于 `domain.com`。**注意**：只有 `．`(U+FF0E) 在 NFKC 下也变 `.`；`。`(U+3002) 与 `｡`(U+FF61) 用 `unicodedata.normalize('NFKC', …)` **复现不出来**，判定这一层必须看解析器/IDN 实现，不要用 Unicode 规范化自检。
 - **受害面**：密码重置 / 找回密码 / OAuth 提供方（同形账号被判定为同一用户）
 
-> 出处：同上（Punycode 与 "similar character" 节）。
+> 出处：[swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings) `Encoding Transformations/README.md`（`### Punycode` 与 "similar character" 节）。**域名层映射一条核对自** [UTS-46 IDNA 映射表](https://www.unicode.org/Public/idna/latest/IdnaMappingTable.txt)：`3002 ; mapped ; 002E`、`FF0E ; mapped ; 002E`、`FF61 ; mapped ; 002E`。
 
 **4.3 编码变换清单（本文件不重复）** → `waf-bypass.md` §4.1（编码层）–§4.3（语义层）；路径类载荷 → `path-traversal.md`
+
+**4.4 转义与解码的先后顺序颠倒（HTML 实体绕过 `addslashes`）** `[本 skill 自研，2026-10 实战沉淀]`
+
+> 本节是**「分层」的另一种形态**：不是"两层解码次数不同"，而是**同一层内「转义」与「解码」的先后顺序被写反了** —— 先转义、后解码，转义就白做。
+
+**机理**：应用做了 `addslashes()`（或任何字符级转义）**之后**才做 HTML 实体解码，再拼进 SQL / 命令 / 文件路径：
+
+```
+攻击者提交：  x&#39;                ← HTML 实体形式的单引号
+                    ↓
+① addslashes()  字符串里【没有字面单引号】→ 无字符可转义 → 原样放行
+                    ↓
+② 实体解码      &#39; → '        ← 【顺序颠倒，此处失效】
+                    ↓
+③ 拼进 SQL      ... like '%x'%'   ← 单引号闭合字符串 → 注入
+```
+
+**测试法（关键：负向结论不能只测一种形式）**：
+
+| 提交形式 | 编码 | 若只测这一种会怎样 |
+|---|---|---|
+| 字面符 | `'` | ❌ **会被正确转义，误判为「不可注入」** |
+| **十进制实体** | `&#39;` | ✅ 本次命中的形式 |
+| 十六进制实体 | `&#x27;` | ✅ 实测同样命中 |
+| 命名实体 | `&apos;` | ⚠️ **实测未解码**（原样回显 `&apos;`）—— 见下 |
+
+> **⚠️ `&apos;` 不一定是等价形式**：本次目标上 `&#39;` / `&#x27;` 均被解码成 `'`，但 **`&apos;` 原样回显、未被解码**。
+> **原因未实测确认**（推测与解码函数支持的实体集/flags 有关，如 PHP `html_entity_decode()` 默认 `ENT_HTML401` 不含 `&apos;`；**该 PHP 行为本机未复现验证，仅作线索**）。
+> **实操**：**优先用数字实体**（`&#39;`/`&#x27;`）；`&apos;` 只作补充尝试，**不可据其失败就否定整类**。
+
+> **纪律**：注入类测试的负向结论，**必须至少覆盖「字面符 + 十进制实体 + 十六进制实体」三种形式**才能下"不可注入"的结论。只测字面符 = 证据不足。
+> 同理适用于其它被"过滤"的字符：`"`（`&#34;`/`&quot;`）、`<`/`>`（`&#60;`/`&#62;`）、**`=`（`&#61;`，可绕过"剥离等号"的过滤器 —— 实测有效）**、`/`（`&#47;`）、`.`（`&#46;`）。
+
+**双重实体编码（绕过过滤器自身的实体解码）** `[本 skill 自研]`：
+
+若目标过滤器**自己会解一层实体**（用于黑名单匹配），可用**双重编码**让它解完一层后仍残留实体、由浏览器/应用再解一层：
+
+```
+提交：  &#38;#39;
+过滤器解一层：&#38; → &     ⇒ 剩下 &#39;   ← 不含字面引号，黑名单匹配不到
+浏览器/应用再解：&#39; → '    ⇒ 真正的单引号
+```
+
+**本次实战两处命中**（同一目标、同一机理）：
+- **SQL 注入**：`skey=x&#39;` → 页面回显 `You have an error in your SQL syntax ... near '%')`（字面 `'` 则被正确转义、无报错）
+- **XSS**：`skey=zzz&#38;#115;cript` → 过滤器解一层后剩 `&#115;cript` → 浏览器解出 `script`，绕过"打断 `script` 关键字"的黑名单
+
+**判据门槛**：必须拿到「**同一入口、字面形式被拦/被转义，实体形式生效**」的**成对证据**才算命中；只证明"实体形式没被拦"不够（可能只是没触发规则）。
 
 ## 5. 工具用法
 
