@@ -101,6 +101,7 @@ for x in d['list']:
 
 > **⚠️ 读法提示**：UEditor 的 JSON 响应把中文编码成 **Unicode 转义序列**（形如 `\u` 加四位十六进制）—— **curl 直接看到的不是可读中文**。
 > **下文（判据表 + 实测示例）为可读起见显示解码后的文字**；脚本里做判据要先 `json.loads` 再比对。
+> **⚠️ 判据字段别取错**：中文状态串在 **`list[*].state`** 里；顶层 `state` 只有 `SUCCESS`/`ERROR` 两个值（`action_crawler.php` 按 `count($list)` 决定，**`source` 列表非空即为 `SUCCESS`，哪怕每一项都失败**）→ 别拿顶层 `state` 当判据。**参数形态**：`source` 必须传成数组（`source[]=<url>` 落进 PHP 的 `$_GET['source']`）；传标量会让后端的 `foreach ($source as ...)` 直接失败。
 
 | 返回（解码后） | 含义 | 源码对应 |
 |---|---|---|

