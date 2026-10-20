@@ -68,6 +68,12 @@ sudo bash -c 'echo "10.129.22.120 egotistical-bank.local" >> /etc/hosts'
 
 **匿名 RPC 因目标而异**：Monteverde `sudo rpcclient -U '' -N 10.129.228.111 -c 'enumdomusers'` 直接吐全量用户（HTB-Monteverde）；Search 匿名 RPC 全 `NT_STATUS_CONNECTION_DISCONNECTED`（HTB-Search）；Blackfield 仅 lsaquery——三种都试。
 
+**匿名是"分量"的，不是一刀切**（HTB-Manager 实证）：
+
+- **LDAP 的 rootDSE 必可读，不代表能搜索**。`ldapsearch -x -H ldap://<DC> -s base -b "" "(objectClass=*)" namingContexts` 回 `result: 0 Success` 只说明服务活着、拿到了 `DC=...` 根 DN；再往子树查若返回 `result: 1 Operations error` + `text: 000004DC ... a successful bind must be completed on the connection`，就是**匿名 bind 不允许搜索**，用户/组一个都拿不到，转别的渠道。
+- **SMB 匿名被拒 ≠ SAMR 封死**。匿名报 `0xc0000022 STATUS_ACCESS_DENIED`（LSAD 会话都开不了）时，换**任意用户名 + 空口令**，服务端会回落成 `Guest`：`nxc smb <ip> -u 'anything' -p '' --shares` 能出共享列表，`--rid-brute` 也常能过——Guest 属已认证主体，权限高于匿名。
+- **`--rid-brute` 收的是整数上限**（`--rid-brute 5000`），写成 `500-5000` 这种区间会直接报 `invalid int value`，别当成目标端异常。
+
 ### 1.3 IOXIDResolver IPv6 透视（IPv4 收窄时的盲区）
 
 IPv4 只暴露 80/135 时，RPC IOXIDResolver 接口免认证泄露网卡 IPv6，IPv6 侧常全开（来源：HTB-APT）：
@@ -177,6 +183,8 @@ for f in *.pdf; do pdfinfo "$f" 2>/dev/null | grep -i '^Creator:'; done | sed 's
 | xlsx | `unzip Phishing_Attempt.xlsx -d extracted` → `cat sharedStrings.xml`——`xl/sharedStrings.xml` 明文存全部单元格字符串，实测是全员"姓名:密码"表 | HTB-Search |
 | Web 图片 | `wget http://search.htb/images/slide_2.jpg` 后**放大人工审查**，实测便签写着 'Send password to Hope Sharp IsolationIsKey?' | HTB-Search |
 | SMB 共享配置 | azure.xml 序列化字段 `<S N="Password">` 明文凭据 | HTB-Monteverde |
+| 站点备份包 | `unzip -l` 看清单后解包，**必须 `ls -la`**：点开头的文件（`.old-conf.xml` 之类）会被普通 `ls` 掩盖，实测里面是一段 LDAP 连接配置、明文写着域账号与口令 | HTB-Manager |
+| SQL `xp_dirtree` 列出的目录 | 只给文件名不给内容；落在 web 根内的直接 `curl -I` 验证能否下载（详见 `windows-mssql-lowpriv-surface.md`） | HTB-Manager |
 
 读出的凭据先验证再深入（命令见 §5.2）。
 

